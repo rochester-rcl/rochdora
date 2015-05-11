@@ -172,6 +172,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
   public function getChildren(IslandoraTuque $connection) {
     // Go and get occlusions.
     $children = array();
+
     $target = $this->preprocessorParameters['target'] . '/Phase3/' . $this->volumeBase;
     $mask = "/($this->pageBase)(.*)_p3z\.tif/";
     $all_occlusions = rochdora_retrieve_files_for_object($target, $mask);
@@ -202,7 +203,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
     $sequence_number = 1;
     foreach ($occlusions as $occlusion) {
       $occlusion_base = str_replace('_p3z', '', $occlusion->name);
-      $children[] = new RochdoraBatchOcclusionObject($connection, $this->id, $occlusion, $sequence_number, $this->preprocessorParameters, $this->volumeBase, $occlusion_base);
+      $children[] = new RochdoraBatchOcclusionObject($connection, $this->id, $occlusion, $sequence_number, $this->preprocessorParameters, $this->volumeBase, $occlusion_base, $this->label);
       $sequence_number = $sequence_number + 1;
     }
 
@@ -213,7 +214,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
       $file->uri = $target_tiff;
       $file->filename = "{$this->pageBase}.tif";
       $file->name = pathinfo("{$this->pageBase}.tif", PATHINFO_FILENAME);
-      $children[] = new RochdoraBatchOccludedImage($connection, $this->id, $file, $this->preprocessorParameters);
+      $children[] = new RochdoraBatchOccludedImage($connection, $this->id, $file, $this->preprocessorParameters, $this->volumeBase, $this->pageBase);
     }
     return $children;
   }
@@ -239,7 +240,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
    * Add the content model relationship(s).
    */
   protected function addContentModelRelationships() {
-    $this->models = array('islandora:pageCModel', 'islandora:compoundCModel');
+    $this->models = array('islandora:pageCModel');
   }
 
   /**
@@ -344,15 +345,17 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
 class RochdoraBatchOccludedImage extends IslandoraScanBatchObject {
   protected $parentId;
   protected $volumeBase;
-  protected $occlusionBase;
+  protected $pageBase;
 
   /**
    * Constructor.
    */
-  public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $pp) {
+  public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $pp, $volume_base, $page_base) {
     $label = $object_info->name;
     parent::__construct($connection, $label, $object_info, $pp);
     $this->parentId = $parent_id;
+    $this->volumeBase = $volume_base;
+    $this->pageBase = $page_base;
   }
 
   /**
@@ -382,6 +385,14 @@ class RochdoraBatchOccludedImage extends IslandoraScanBatchObject {
    */
   public function batchProcess() {
     $this->getObj();
+    $this->getTitle();
+
+    if (!isset($this->label)) {
+      $this->label = t('!parent_id Occluded Image', array('!parent_id' => $this->parentId));
+    }
+    else {
+      $this->label = t('Occluded Image of !label', array('!label' => $this->label));
+    }
     return ISLANDORA_BATCH_STATE__DONE;
   }
 
@@ -397,6 +408,21 @@ class RochdoraBatchOccludedImage extends IslandoraScanBatchObject {
       $this->ingestDatastream($obj_datastream);
     }
   }
+
+  /**
+   * Spoof function to get the MODS to set a title.
+   */
+  protected function getMods() {
+    // Since the parent object isn't going to be ingested we need to do a bit of
+    // shenanigans to get its label.
+    $target_mods = "{$this->preprocessorParameters['target']}/Phase5/metadata/{$this->volumeBase}/{$this->pageBase}_p3.mods";
+    if (file_exists($target_mods)) {
+      return file_get_contents($target_mods);
+    }
+    else {
+      return FALSE;
+    }
+  }
 }
 
 class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
@@ -408,8 +434,8 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
   /**
    * Constructor.
    */
-  public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $occlusion_base) {
-    $label = 'gdsjagkads';
+  public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $occlusion_base, $parent_label) {
+    $label = format_string('!parent_label - Occlusion !sequence', array('!parent_label' => $parent_label, '!sequence' => $sequence_number));
     parent::__construct($connection, $label, $object_info, $pp);
     $this->parentId = $parent_id;
     $this->volumeBase = $volume_base;
