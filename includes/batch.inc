@@ -11,28 +11,57 @@
  */
 class RochdoraBatchPreprocessor extends IslandoraScanBatch {
   /**
-   * Scan the directory with file_scan_directory().
-   *
-   * Gets all the base volumes to be constructed.
+   * Perform preprocessing of the scanned resources.
    */
-  protected function scanDirectory($target) {
-    $files = array();
-    $target_path = drupal_realpath($target) . "/Phase1";
-    $target_length = strlen($target_path) + 1;
-    $directory_contents = file_scan_directory(
-      $target_path,
-      $this->getPattern(),
-      array('recurse' => FALSE)
-    );
-    foreach ($directory_contents as $uri => $value) {
-      $files[substr($uri, $target_length)] = $value;
+  public function preprocess() {
+    $files = $this->scan();
+
+    if ($files === FALSE) {
+      // Failed to scan.
+      // TODO: Pop an error.
     }
-    return $files;
+    elseif (empty($files)) {
+      // No contents.
+      // TODO: Pop a warning.
+    }
+    $this->parameters['file_listing'] = $files;
+
+    $added = array();
+
+    $grouped = $this->groupFiles($files);
+
+    $object_class = static::getObjectClass();
+    foreach ($grouped as $base_name => $object_info) {
+      $ingest_object = new $object_class($this->connection, $base_name, $object_info, $this->parameters);
+
+      // XXX: Might be better to have this actually handled as another
+      // "preprocessor", so arbitrary "tree" structures might be built?
+      $added = array_merge($added, $this->preprocessChildren($ingest_object));
+    }
+
+    return $added;
   }
 
-  // @TODO: Scan ZIP.
-
-
+  /**
+   * Group our files into base volumes to start out.
+   */
+  protected function groupFiles($files) {
+    // Filter out down to our base directory.
+    $grouped = array();
+    foreach ($files as $uri => &$file_object) {
+      // Looking only for the base Phase 1 directories to start as our initial
+      // volume object.
+      if (strpos($uri, 'Phase1') !== FALSE) {
+        $path_parts = explode(DIRECTORY_SEPARATOR, $uri);
+        // Want all directories that dictate a volume object.
+        $key = $path_parts[1];
+        if (!isset($grouped[$key])) {
+          $grouped[$key] = $key;
+        }
+      }
+    }
+    return $grouped;
+  }
   /**
    * Get the associated object class.
    *
@@ -54,9 +83,8 @@ class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
   public function getChildren(IslandoraTuque $connection) {
     module_load_include('inc', 'rochdora', 'includes/utilities');
     $children = array();
-    $target = $this->preprocessorParameters['target'] . '/Phase3/' . $this->baseName;
-    $mask = "/(.*)_p3\.tif/";
-    $pages = rochdora_retrieve_files_for_object($target, $mask);
+    $mask = "/Phase3\/{$this->baseName}\/(.*)_p3\.tif/";
+    $pages = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $mask);
     $sequence_number = 1;
     foreach ($pages as $page) {
       $children[] = new RochdoraBatchPageObject($connection, $this->id, $sequence_number, $page, $this->preprocessorParameters, $this->baseName);
@@ -108,7 +136,8 @@ class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
       $mods_datastream->label = 'MODS Record';
 
       // Go and attempt to retrieve the MODS for the volume.
-      $mods_files = rochdora_retrieve_files_for_object("{$this->preprocessorParameters['target']}/Phase5/metadata/{$this->baseName}", '/(.*)\.mods/');
+      $mask = "/Phase5\/metadata\/{$this->baseName}\/(.*)\.mods/";
+      $mods_files = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $mask);
       if (!empty($mods_files)) {
         $mods_file = reset($mods_files);
         $mods_datastream->setContentFromFile($mods_file->uri);
@@ -173,31 +202,30 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
     // Go and get occlusions.
     $children = array();
 
-    $target = $this->preprocessorParameters['target'] . '/Phase3/' . $this->volumeBase;
-    $mask = "/($this->pageBase)(.*)_p3z\.tif/";
-    $all_occlusions = rochdora_retrieve_files_for_object($target, $mask);
+    $mask = "/Phase3\/{$this->volumeBase}\/($this->pageBase)(.*)_p3z\.tif/";
+    $all_occlusions = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $mask);
 
     // Filter out the single occlusion objects.
     $page_base = $this->pageBase;
+    $volume_base = $this->volumeBase;
     $filter = function ($occlusion) use ($page_base) {
       return preg_match("/{$page_base}_p3z\.tif/", $occlusion->filename);
     };
     $single_occlusions = array_filter($all_occlusions, $filter);
 
     // Filter out the rest of the objects.
-    $filter = function ($occlusion) use ($page_base, $single_occlusions) {
+    $filter = function ($occlusion) use ($page_base, $single_occlusions, $volume_base) {
       preg_match("/{$page_base}[a-z]_p3z\.tif/", $occlusion->filename, $match);
       // Have to handle a file naming case where a single occlusion has a verso
       // and thus would match the file naming scheme with a 'v' on the end. Ex:
       // prefix_095_p3z.tif and prefix_095v_p3z.tif.
       if (!empty($match)) {
-        $potential_key = "{$page_base}_p3z.tif";
+        $potential_key = "Phase3/{$volume_base}/{$page_base}_p3z.tif";
         return !isset($single_occlusions[$potential_key]);
       }
       return FALSE;
     };
     $multiple_occlusions = array_filter($all_occlusions, $filter);
-
     $occlusions = array_merge($single_occlusions, $multiple_occlusions);
     ksort($occlusions);
     $sequence_number = 1;
@@ -208,10 +236,10 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
     }
 
     // Go find all the occluded images to create as well.
-    $target_tiff = "{$this->preprocessorParameters['target']}/Phase1/{$this->volumeBase}/TIFFs/{$this->pageBase}.tif";
-    if (file_exists($target_tiff)) {
+    $target_tiff = "Phase1/{$this->volumeBase}/TIFFs/{$this->pageBase}.tif";
+    if (isset($this->preprocessorParameters['file_listing'][$target_tiff])) {
       $file = new stdClass();
-      $file->uri = $target_tiff;
+      $file->uri = $this->preprocessorParameters['file_listing'][$target_tiff]->uri;
       $file->filename = "{$this->pageBase}.tif";
       $file->name = pathinfo("{$this->pageBase}.tif", PATHINFO_FILENAME);
       $children[] = new RochdoraBatchOccludedImage($connection, $this->id, $file, $this->preprocessorParameters, $this->volumeBase, $this->pageBase);
@@ -269,9 +297,9 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
       $mods_datastream->label = 'MODS Record';
 
       // Go and attempt to retrieve the MODS for the volume.
-      $target_mods = "{$this->preprocessorParameters['target']}/Phase5/metadata/{$this->volumeBase}/{$this->pageBase}_p3.mods";
-      if (file_exists($target_mods)) {
-        $mods_datastream->setContentFromFile($target_mods, FALSE);
+      $target_mods = "Phase5/metadata/{$this->volumeBase}/{$this->pageBase}_p3.mods";
+      if (isset($this->preprocessorParameters['file_listing'][$target_mods])) {
+        $mods_datastream->setContentFromFile($this->preprocessorParameters['file_listing'][$target_mods]->uri, FALSE);
       }
       else {
         return FALSE;
@@ -316,9 +344,9 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
       $tei_datastream->label = 'TEI Record';
 
       // Go and attempt to retrieve the TEI for the volume.
-      $target_tei = "{$this->preprocessorParameters['target']}/Phase5/final/{$this->volumeBase}/{$this->pageBase}_p3.tei";
-      if (file_exists($target_tei)) {
-        $tei_datastream->setContentFromFile($target_tei, FALSE);
+      $target_tei = "Phase5/final/{$this->volumeBase}/{$this->pageBase}_p3.tei";
+      if (isset($this->preprocessorParameters['file_listing'][$target_tei])) {
+        $tei_datastream->setContentFromFile($this->preprocessorParameters['file_listing'][$target_tei]->uri, FALSE);
       }
       else {
         return FALSE;
@@ -415,9 +443,9 @@ class RochdoraBatchOccludedImage extends IslandoraScanBatchObject {
   protected function getMods() {
     // Since the parent object isn't going to be ingested we need to do a bit of
     // shenanigans to get its label.
-    $target_mods = "{$this->preprocessorParameters['target']}/Phase5/metadata/{$this->volumeBase}/{$this->pageBase}_p3.mods";
-    if (file_exists($target_mods)) {
-      return file_get_contents($target_mods);
+    $target_mods = "Phase5/metadata/{$this->volumeBase}/{$this->pageBase}_p3.mods";
+    if (isset($this->preprocessorParameters['file_listing'][$target_mods])) {
+      return file_get_contents($this->preprocessorParameters['file_listing'][$target_mods]->uri);
     }
     else {
       return FALSE;
@@ -450,9 +478,8 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
   public function getChildren(IslandoraTuque $connection) {
     // Go and get occlusion images (front and back).
     $children = array();
-    $target = $this->preprocessorParameters['target'] . '/Phase3/' . $this->volumeBase;
-    $mask = "/$this->occlusionBase(.*)_p3z\.tif/";
-    $occlusion_images = rochdora_retrieve_files_for_object($target, $mask);
+    $mask = "/Phase3\/{$this->volumeBase}\/{$this->occlusionBase}(v)?_p3z\.tif/";
+    $occlusion_images = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $mask);
     $sequence_number = 1;
     foreach ($occlusion_images as $image) {
       $children[] = new RochdoraBatchOcclusionImage($connection, $this->id, $image, $sequence_number, $this->preprocessorParameters, $this->volumeBase, $this->occlusionBase);
