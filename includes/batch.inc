@@ -72,8 +72,6 @@ class RochdoraBatchPreprocessor extends IslandoraScanBatch {
   }
 }
 
-
-
 class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
   /**
    * Goes and gets the first child (Volumes) of Rochester's data model.
@@ -231,7 +229,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
     $sequence_number = 1;
     foreach ($occlusions as $occlusion) {
       $occlusion_base = str_replace('_p3z', '', $occlusion->name);
-      $children[] = new RochdoraBatchOcclusionObject($connection, $this->id, $occlusion, $sequence_number, $this->preprocessorParameters, $this->volumeBase, $occlusion_base, $this->label);
+      $children[] = new RochdoraBatchOcclusionObject($connection, $this->id, $occlusion, $sequence_number, $this->preprocessorParameters, $this->volumeBase, $this->pageBase, $occlusion_base, $this->label);
       $sequence_number = $sequence_number + 1;
     }
 
@@ -456,18 +454,20 @@ class RochdoraBatchOccludedImage extends IslandoraScanBatchObject {
 class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
   protected $parentId;
   protected $volumeBase;
+  protected $pageBase;
   protected $occlusionBase;
   protected $sequenceNumber;
 
   /**
    * Constructor.
    */
-  public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $occlusion_base, $parent_label) {
+  public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $page_base, $occlusion_base, $parent_label) {
     $label = format_string('!parent_label - Occlusion !sequence', array('!parent_label' => $parent_label, '!sequence' => $sequence_number));
     parent::__construct($connection, $label, $object_info, $pp);
     $this->parentId = $parent_id;
     $this->volumeBase = $volume_base;
     $this->occlusionBase = $occlusion_base;
+    $this->pageBase = $page_base;
     $this->sequenceNumber = $sequence_number;
     $this->label = $label;
   }
@@ -482,7 +482,7 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
     $occlusion_images = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $mask);
     $sequence_number = 1;
     foreach ($occlusion_images as $image) {
-      $children[] = new RochdoraBatchOcclusionImage($connection, $this->id, $image, $sequence_number, $this->preprocessorParameters, $this->volumeBase, $this->occlusionBase);
+      $children[] = new RochdoraBatchOcclusionImage($connection, $this->id, $image, $sequence_number, $this->preprocessorParameters, $this->volumeBase, $this->pageBase, $this->occlusionBase);
       $sequence_number = $sequence_number + 1;
     }
     return $children;
@@ -517,19 +517,44 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
 class RochdoraBatchOcclusionImage extends IslandoraScanBatchObject {
   protected $parentId;
   protected $volumeBase;
+  protected $pageBase;
   protected $occlusionBase;
   protected $sequenceNumber;
 
   /**
    * Constructor.
    */
-  public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $occlusion_base) {
+  public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $page_base, $occlusion_base) {
     // Sniff out from the file name if this a front or back and name as such.
+    $yum = "{$occlusion_base}_[0-9]{3}_p3z";
+    $target_tei = "Phase5/final/{$volume_base}/{$page_base}_p3.tei";
+    if (isset($pp['file_listing'][$target_tei])) {
+      // Go sniff out a base label for this image.
+      $tei = file_get_contents($pp['file_listing'][$target_tei]->uri);
+      // Strip off xml-model so libxml doesn't have a fit.
+      $tei = preg_replace('/<\?xml-model .*\?>/', '', $tei);
+      $dom = new DOMDocument();
+      $dom->loadXML($tei);
+      $xpath = new DOMXPath($dom);
+      $xpath->registerNamespace('tei', 'http://www.tei-c.org/ns/1.0');
+      $label_xpath = format_string('normalize-space(/tei:TEI/tei:teiHeader/tei:fileDesc/tei:sourceDesc/tei:msDesc/tei:physDesc/tei:additions/tei:figure[tei:graphic[@url="!filename"]])', array('!filename' => "{$page_base}_p3.jpg"));
+      $base_label = $xpath->evaluate($label_xpath);
+    }
     if (preg_match("/{$occlusion_base}_[0-9]{3}_p3z/", $object_info->name)) {
-      $label = t('Front');
+      if (!empty($base_label)) {
+        $label = t('!base_label - Front', array('!base_label' => $base_label));
+      }
+      else {
+        $label = t('Front');
+      }
     }
     else {
-      $label = t('Back');
+      if (!empty($base_label)) {
+        $label = t('!base_label - Back', array('!base_label' => $base_label));
+      }
+      else {
+        $label = t('Back');
+      }
     }
     parent::__construct($connection, $label, $object_info, $pp);
     $this->parentId = $parent_id;
@@ -537,6 +562,7 @@ class RochdoraBatchOcclusionImage extends IslandoraScanBatchObject {
     $this->occlusionBase = $occlusion_base;
     $this->sequenceNumber = $sequence_number;
     $this->label = $label;
+    $this->pageBase = $page_base;
   }
 
   /**
