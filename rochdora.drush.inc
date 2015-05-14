@@ -34,7 +34,7 @@ function rochdora_drush_command() {
 }
 
 /**
- * Implements hook_drush_command().
+ * Prepares a diary to be ingested for Rochester.
  */
 function drush_rochdora_prepare_diary() {
   drupal_static_reset('islandora_get_tuque_connection');

@@ -20,13 +20,13 @@
 function rochdora_volume_batch_form($form, $form_state, AbstractObject $object) {
   module_load_include('inc', 'islandora', 'includes/utilities');
   $default_namespace = islandora_get_namespace($object->id);
-
+  $scheme = file_default_scheme();
   $form['target'] = array(
     '#type' => 'managed_file',
     '#title' => t('Zip file'),
     '#description' => t('A Zip file containing a number of volumes to be ingested. The file structure must conform to the specifications as defined in the README.'),
     '#required' => TRUE,
-    '#upload_location' => 'public://',
+    '#upload_location' => "$scheme://",
     '#upload_validators' => array(
       'file_validate_extensions' => array('zip'),
     ),
@@ -37,15 +37,15 @@ function rochdora_volume_batch_form($form, $form_state, AbstractObject $object) 
   );
   $form['namespace'] = array(
     '#type' => 'textfield',
-    '#title' => t('Namespace for created objects?'),
-    '#description' => t('Book and page objects will be contructed within this namespace.'),
+    '#title' => t('Namespace for created objects'),
+    '#description' => t('Objects will be constructed within this namespace.'),
     "#default_value" => $default_namespace,
     '#size' => 15,
   );
   $form['ingest_set_immediately'] = array(
     '#type' => 'checkbox',
     '#title' => t('Ingest immediately?'),
-    '#description' => t('If not selected, objects will just be preprocessed into the queue of objects to be ingested, to be fully-processed (and ingested) later--whenever an admin deems it an appropriate time.'),
+    '#description' => t('If not selected, objects will just be preprocessed into the queue of objects to be ingested.'),
     '#default_value' => TRUE,
   );
 
@@ -69,7 +69,7 @@ function rochdora_volume_batch_form_submit($form, $form_state) {
   $connection = islandora_get_tuque_connection();
   $parameters = $form_state['values'] + array(
     'type' => 'zip',
-    'parent_relationship_uri' => 'info:fedora/fedora-system:def/relations-external#',
+    'parent_relationship_uri' => FEDORA_RELS_EXT_URI,
     'parent_relationship_pred' => 'isMemberOfCollection',
   );
   $preprocessor = new RochdoraBatchPreprocessor($connection, $parameters);

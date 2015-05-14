@@ -15,15 +15,6 @@ class RochdoraBatchPreprocessor extends IslandoraScanBatch {
    */
   public function preprocess() {
     $files = $this->scan();
-
-    if ($files === FALSE) {
-      // Failed to scan.
-      // TODO: Pop an error.
-    }
-    elseif (empty($files)) {
-      // No contents.
-      // TODO: Pop a warning.
-    }
     $this->parameters['file_listing'] = $files;
 
     $added = array();
@@ -33,9 +24,6 @@ class RochdoraBatchPreprocessor extends IslandoraScanBatch {
     $object_class = static::getObjectClass();
     foreach ($grouped as $base_name => $object_info) {
       $ingest_object = new $object_class($this->connection, $base_name, $object_info, $this->parameters);
-
-      // XXX: Might be better to have this actually handled as another
-      // "preprocessor", so arbitrary "tree" structures might be built?
       $added = array_merge($added, $this->preprocessChildren($ingest_object));
     }
 
@@ -75,8 +63,6 @@ class RochdoraBatchPreprocessor extends IslandoraScanBatch {
 class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
   /**
    * Goes and gets the first child (Volumes) of Rochester's data model.
-   *
-   * Assume that the un
    */
   public function getChildren(IslandoraTuque $connection) {
     module_load_include('inc', 'rochdora', 'includes/utilities');
@@ -88,8 +74,6 @@ class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
       $children[] = new RochdoraBatchPageObject($connection, $this->id, $sequence_number, $page, $this->preprocessorParameters, $this->baseName);
       $sequence_number = $sequence_number + 1;
     }
-
-    // Go get all unoccluded pages to serve as the pages of the diary.
     return $children;
   }
 
@@ -128,7 +112,6 @@ class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
   protected function getMods() {
     if (!isset($this['MODS'])) {
       module_load_include('inc', 'rochdora', 'includes/utilities');
-      // TODO: Create the MODS datastream on this object.
       $mods_datastream = $this->constructDatastream('MODS', 'M');
       $mods_datastream->mimetype = 'application/xml';
       $mods_datastream->label = 'MODS Record';
@@ -250,23 +233,13 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
    */
   public function addRelationships() {
     module_load_include('inc', 'islandora_paged_content', 'includes/utilities');
-    // Add relationship to collection.
-    $rels_ext = $this->relationships;
-    islandora_paged_content_set_relationship($rels_ext, ISLANDORA_RELS_EXT_URI, 'isPageOf', $this->parentId);
-    islandora_paged_content_set_relationship($rels_ext, ISLANDORA_RELS_EXT_URI, 'isSequenceNumber', (string) $this->sequenceNumber, TRUE);
-    islandora_paged_content_set_relationship($rels_ext, ISLANDORA_RELS_EXT_URI, 'isPageNumber', (string) $this->sequenceNumber, TRUE);
-    islandora_paged_content_set_relationship($rels_ext, ISLANDORA_RELS_EXT_URI, 'isSection', '1', TRUE);
-    islandora_paged_content_set_relationship($rels_ext, FEDORA_RELS_EXT_URI, 'isMemberOf', $this->parentId);
-    $this->addContentModelRelationships();
-    module_load_include('inc', 'islandora_ocr', 'includes/derivatives');
-    islandora_ocr_set_generate_ocr_rels_ext_statement($this, TRUE);
-  }
-
-  /**
-   * Add the content model relationship(s).
-   */
-  protected function addContentModelRelationships() {
-    $this->models = array('islandora:pageCModel');
+    islandora_paged_content_add_relationships_to_child($this, array(
+      'model' => 'islandora:pageCModel',
+      'parent' => $this->parentId,
+      'page_number' => $this->sequenceNumber,
+      'language' => 'eng',
+      'extract_text' => 'tesseract',
+    ));
   }
 
   /**
@@ -294,7 +267,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
       $mods_datastream->mimetype = 'application/xml';
       $mods_datastream->label = 'MODS Record';
 
-      // Go and attempt to retrieve the MODS for the volume.
+      // Go and attempt to retrieve the MODS for the page.
       $target_mods = "Phase5/metadata/{$this->volumeBase}/{$this->pageBase}_p3.mods";
       if (isset($this->preprocessorParameters['file_listing'][$target_mods])) {
         $mods_datastream->setContentFromFile($this->preprocessorParameters['file_listing'][$target_mods]->uri, FALSE);
@@ -341,7 +314,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
       $tei_datastream->mimetype = 'application/xml';
       $tei_datastream->label = 'TEI Record';
 
-      // Go and attempt to retrieve the TEI for the volume.
+      // Go and attempt to retrieve the TEI for the page.
       $target_tei = "Phase5/final/{$this->volumeBase}/{$this->pageBase}_p3.tei";
       if (isset($this->preprocessorParameters['file_listing'][$target_tei])) {
         $tei_datastream->setContentFromFile($this->preprocessorParameters['file_listing'][$target_tei]->uri, FALSE);
@@ -573,9 +546,11 @@ class RochdoraBatchOcclusionImage extends IslandoraScanBatchObject {
   }
 
   /**
-   * Add collection and content model relationships.
+   * Add compound and content model relationships.
    */
   public function addRelationships() {
+    // Can't use the compound helper function as it expects the object to be
+    // be present to determine how to set the sequence number.
     $rels_predicate = variable_get('islandora_compound_object_relationship', 'isConstituentOf');
     $this->relationships->add(FEDORA_RELS_EXT_URI, $rels_predicate, $this->parentId);
     $escaped_pid = str_replace(':', '_', $this->parentId);
