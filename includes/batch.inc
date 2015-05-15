@@ -465,6 +465,8 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
    * Add collection and content model relationships.
    */
   public function addRelationships() {
+    // Can't use the compound helper function as it expects the object to be
+    // be present to determine how to set the sequence number.
     $rels_predicate = variable_get('islandora_compound_object_relationship', 'isConstituentOf');
     $this->relationships->add(FEDORA_RELS_EXT_URI, $rels_predicate, $this->parentId);
     $escaped_pid = str_replace(':', '_', $this->parentId);
