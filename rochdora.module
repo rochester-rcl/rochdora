@@ -1,0 +1,40 @@
+<?php
+/**
+ * @file
+ * Customizations for Rochester.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function rochdora_menu() {
+  $items = array();
+  $items['islandora/object/%islandora_object/manage/collection/volume_batch'] = array(
+    'title' => 'Volume Batch',
+    'access callback' => 'rochdora_volume_batch_menu_access',
+    'access arguments' => array(2),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('rochdora_volume_batch_form', 2),
+    'file' => 'includes/batch.form.inc',
+    'type' => MENU_LOCAL_ACTION,
+  );
+  return $items;
+}
+
+/**
+ * Menu access callback.
+ */
+function rochdora_volume_batch_menu_access($object) {
+  if (!islandora_object_access(ISLANDORA_INGEST, $object)) {
+    return FALSE;
+  }
+
+  $c = 'COLLECTION_POLICY';
+  if (isset($object[$c]) && islandora_datastream_access(ISLANDORA_VIEW_OBJECTS, $object[$c])) {
+    $cp = new CollectionPolicy($object[$c]->content);
+
+    return array_key_exists('islandora:bookCModel', $cp->getContentModels());
+  }
+
+  return FALSE;
+}

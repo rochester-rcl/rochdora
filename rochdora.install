@@ -1,0 +1,13 @@
+<?php
+/**
+ * @file
+ * Installs things for Rochester.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function rochdora_install() {
+  // Allow Rochester to have "non-standard" compopunds.
+  variable_set('islandora_compound_object_compound_children', FALSE);
+}

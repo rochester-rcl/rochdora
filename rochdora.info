@@ -1,0 +1,10 @@
+name = Rochdora
+description = "Customizations for Rochester."
+package = Rochester
+dependencies[] = islandora_batch
+dependencies[] = islandora
+depdenencies[] = islandora_paged_content
+dependencies[] = islandora_compound_object
+files[] = includes/batch.inc
+version = 7.x-dev
+core = 7.x
