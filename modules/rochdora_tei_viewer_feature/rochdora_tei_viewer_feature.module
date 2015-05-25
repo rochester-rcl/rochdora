@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the Rochdora TEI Viewer Feature feature.
+ */
+
+include_once 'rochdora_tei_viewer_feature.features.inc';

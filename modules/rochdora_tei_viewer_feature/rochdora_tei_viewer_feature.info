@@ -1,0 +1,10 @@
+name = Rochdora TEI Viewer Feature
+core = 7.x
+package = Features
+dependencies[] = ctools
+dependencies[] = strongarm
+dependencies[] = tei_viewer
+features[ctools][] = strongarm:strongarm:1
+features[features_api][] = api:2
+features[variable][] = islandora_book_viewers
+features[variable][] = islandora_image_annotation_mappings
