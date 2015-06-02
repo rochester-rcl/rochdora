@@ -38,3 +38,33 @@ function rochdora_volume_batch_menu_access($object) {
 
   return FALSE;
 }
+
+/**
+ * Implements hook_islandora_CMODEL_derivative().
+ */
+function rochdora_islandora_compoundCModel_islandora_derivative() {
+  $module_path = drupal_get_path('module', 'rochdora');
+  return array(
+    'rochdora_compound_thumbnail' => array(
+      'source_dsid' => NULL,
+      'destination_dsid' => 'TN',
+      'function' => array('rochdora_compound_derive_thumbnail_of_parent'),
+      'file' => "$module_path/includes/derivatives.inc",
+    ),
+  );
+}
+
+/**
+ * Implements hook_islandora_derivative().
+ */
+function rochdora_islandora_derivative() {
+  $module_path = drupal_get_path('module', 'rochdora');
+  return array(
+    'rochdora_compound_child_thumbnail' => array(
+      'source_dsid' => 'TN',
+      'destination_dsid' => 'NULL',
+      'function' => array('rochdora_compound_derive_thumbnail_on_parent'),
+      'file' => "$module_path/includes/derivatives.inc",
+    ),
+  );
+}
