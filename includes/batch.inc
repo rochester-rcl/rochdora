@@ -350,8 +350,7 @@ class RochdoraBatchOccludedImage extends IslandoraScanBatchObject {
    * Constructor.
    */
   public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $pp, $volume_base, $page_base) {
-    $label = $object_info->name;
-    parent::__construct($connection, $label, $object_info, $pp);
+    parent::__construct($connection, $object_info->name, $object_info, $pp);
     $this->parentId = $parent_id;
     $this->volumeBase = $volume_base;
     $this->pageBase = $page_base;
@@ -501,7 +500,6 @@ class RochdoraBatchOcclusionImage extends IslandoraScanBatchObject {
    */
   public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $page_base, $occlusion_base) {
     // Sniff out from the file name if this a front or back and name as such.
-    $yum = "{$occlusion_base}_[0-9]{3}_p3z";
     $target_tei = "Phase5/final/{$volume_base}/{$page_base}_p3.tei";
     if (isset($pp['file_listing'][$target_tei])) {
       // Go sniff out a base label for this image.
@@ -512,10 +510,13 @@ class RochdoraBatchOcclusionImage extends IslandoraScanBatchObject {
       $dom->loadXML($tei);
       $xpath = new DOMXPath($dom);
       $xpath->registerNamespace('tei', 'http://www.tei-c.org/ns/1.0');
-      $label_xpath = format_string('normalize-space(/tei:TEI/tei:teiHeader/tei:fileDesc/tei:sourceDesc/tei:msDesc/tei:physDesc/tei:additions/tei:figure[tei:graphic[@url="!filename"]])', array('!filename' => "{$page_base}_p3.jpg"));
+      $label_xpath = format_string('normalize-space(/tei:TEI/tei:teiHeader/tei:fileDesc/tei:sourceDesc/tei:msDesc/tei:physDesc/tei:additions/tei:figure[tei:graphic[@url="!front_filename" or @url="!back_filename"]])', array(
+        '!front_filename' => "{$occlusion_base}_p3.jpg",
+        '!back_filename' => "{$occlusion_base}_p3z.jpg",
+      ));
       $base_label = $xpath->evaluate($label_xpath);
     }
-    if (preg_match("/{$occlusion_base}_[0-9]{3}_p3z/", $object_info->name)) {
+    if (preg_match("/{$occlusion_base}_p3z/", $object_info->name)) {
       if (!empty($base_label)) {
         $label = t('!base_label - Front', array('!base_label' => $base_label));
       }
