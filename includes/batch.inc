@@ -212,7 +212,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
     $sequence_number = 1;
     foreach ($occlusions as $occlusion) {
       $occlusion_base = str_replace('_p3z', '', $occlusion->name);
-      $children[] = new RochdoraBatchOcclusionObject($connection, $this->id, $occlusion, $sequence_number, $this->preprocessorParameters, $this->volumeBase, $this->pageBase, $occlusion_base, $this->label);
+      $children[] = new RochdoraBatchOcclusionObject($connection, $this->id, $occlusion, $sequence_number, $this->preprocessorParameters, $this->volumeBase, $this->pageBase, $occlusion_base);
       $sequence_number = $sequence_number + 1;
     }
 
@@ -433,15 +433,13 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
   /**
    * Constructor.
    */
-  public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $page_base, $occlusion_base, $parent_label) {
-    $label = format_string('!parent_label - Occlusion !sequence', array('!parent_label' => $parent_label, '!sequence' => $sequence_number));
-    parent::__construct($connection, $label, $object_info, $pp);
+  public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $page_base, $occlusion_base) {
+    parent::__construct($connection, $object_info->name, $object_info, $pp);
     $this->parentId = $parent_id;
     $this->volumeBase = $volume_base;
     $this->occlusionBase = $occlusion_base;
     $this->pageBase = $page_base;
     $this->sequenceNumber = $sequence_number;
-    $this->label = $label;
   }
 
   /**
@@ -484,7 +482,70 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
    * Function batch_process.
    */
   public function batchProcess() {
+    $this->getTitle();
     return ISLANDORA_BATCH_STATE__DONE;
+  }
+
+  /**
+   * Spoof function to get the MODS to set a title.
+   */
+  protected function getMods() {
+    // Since the parent object isn't going to be ingested we need to do a bit of
+    // shenanigans to get its label.
+    $target_mods = "Phase5/metadata/{$this->volumeBase}/{$this->pageBase}_p3.mods";
+    if (isset($this->preprocessorParameters['file_listing'][$target_mods])) {
+      return file_get_contents($this->preprocessorParameters['file_listing'][$target_mods]->uri);
+    }
+    else {
+      return FALSE;
+    }
+  }
+
+  /**
+   * Get the title for this object.
+   *
+   * Gets the label not empty; otherwise, grabs a title from the MODS.
+   */
+  protected function getTitle() {
+    if (!isset($this->label) || empty($this->label)) {
+      // First check and see if we can munge from the TEI, if not attempt to
+      // fall back on MODS.
+      $target_tei = "Phase5/final/{$this->volumeBase}/{$this->pageBase}_p3.tei";
+      if (isset($this->preprocessorParameters['file_listing'][$target_tei])) {
+        // Go sniff out a base label for this image.
+        $tei = file_get_contents($this->preprocessorParameters['file_listing'][$target_tei]->uri);
+        // Strip off xml-model so libxml doesn't have a fit.
+        $tei = preg_replace('/<\?xml-model .*\?>/', '', $tei);
+        $dom = new DOMDocument();
+        $dom->loadXML($tei);
+        $xpath = new DOMXPath($dom);
+        $xpath->registerNamespace('tei', 'http://www.tei-c.org/ns/1.0');
+        $label_xpath = format_string('normalize-space(/tei:TEI/tei:teiHeader/tei:fileDesc/tei:sourceDesc/tei:msDesc/tei:physDesc/tei:additions/tei:figure[tei:graphic[@url="!front_filename" or @url="!back_filename"]])', array(
+          '!front_filename' => "{$this->occlusionBase}_p3.jpg",
+          '!back_filename' => "{$this->occlusionBase}_p3z.jpg",
+        ));
+        $base_label = $xpath->evaluate($label_xpath);
+        if (!empty($base_label)) {
+          $this->label = $base_label;
+        }
+      }
+      if (empty($base_label)) {
+        $mods = $this->getMods();
+        if ($mods) {
+          $mods_doc = new DOMDocument();
+          $mods_doc->loadXML($mods);
+          $mods_xpath = new DOMXPath($mods_doc);
+          $mods_xpath->registerNamespace('m', 'http://www.loc.gov/mods/v3');
+
+          $this->label = $mods_xpath->evaluate('string(//m:mods/m:titleInfo/m:title/text())');
+        }
+        $this->label = format_string('!parent_label - Occlusion !sequence', array('!parent_label' => isset($this->label) ? $this->label : $this->parentId, '!sequence' => $this->sequenceNumber));
+      }
+      else {
+        $this->label = $base_label;
+      }
+    }
+    return $this->label;
   }
 }
 
