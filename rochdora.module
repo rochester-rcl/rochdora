@@ -18,6 +18,15 @@ function rochdora_menu() {
     'file' => 'includes/batch.form.inc',
     'type' => MENU_LOCAL_ACTION,
   );
+  $items['rochdora/compound_block/%islandora_object'] = array(
+    'title' => 'Compound Block Callback',
+    'access callback' => 'islandora_object_access_callback',
+    'access arguments' => array(ISLANDORA_VIEW_OBJECTS, 2),
+    'page callback' => 'rochdora_compound_block',
+    'page arguments' => array(2),
+    'file' => 'includes/callbacks.inc',
+    'type' => MENU_NORMAL_ITEM,
+  );
   return $items;
 }
 
@@ -40,6 +49,35 @@ function rochdora_volume_batch_menu_access($object) {
 }
 
 /**
+ * Implements hook_block_info().
+ *
+ * Prints a compound block on books.
+ */
+function rochdora_block_view_islandora_compound_object_compound_navigation_alter(&$data, $block) {
+  $object = menu_get_object('islandora_object', 2);
+  if (!$data['content'] && in_array('islandora:bookCModel', $object->models)) {
+    module_load_include('inc', 'islandora_compound_object', 'includes/blocks');
+    module_load_include('inc', 'islandora_paged_content', 'includes/utilities');
+    $page = isset($_GET['islandora_paged_content_page']) ? $_GET['islandora_paged_content_page'] : 1;
+    $pages = islandora_paged_content_get_pages($object);
+    foreach ($pages as $page_array) {
+      if ($page_array['page'] == $page) {
+        $page_object = islandora_object_load($page_array['pid']);
+        break;
+      }
+    }
+    $data['content'] = islandora_compound_object_navigation_block($page_object);
+    // Using a hidden value to populate the sidebar.
+    if (!$data['content']) {
+      $data['content'] = array(
+        '#type' => 'hidden',
+      );
+    }
+    drupal_add_js(drupal_get_path('module', 'rochdora') . '/js/book_page_compound_block.js');
+  }
+}
+
+ /**
  * Implements hook_islandora_CMODEL_derivative().
  */
 function rochdora_islandora_compoundCModel_islandora_derivative() {
