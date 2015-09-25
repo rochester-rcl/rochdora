@@ -57,6 +57,9 @@ function drush_rochdora_prepare_diary() {
   islandora_batch_handle_preprocessor($preprocessor);
 }
 
+/**
+ * Kicks off a batch for fixing diary labels.
+ */
 function drush_rochdora_fix_diary_labels() {
   module_load_include('inc', 'rochdora', 'includes/batch');
   batch_set(rochdora_fix_diary_labels_batch());
