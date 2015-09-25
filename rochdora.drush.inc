@@ -30,11 +30,6 @@ function rochdora_drush_command() {
         ),
       ),
     ),
-    'rochdora_fix_diary_labels' => array(
-      'description' => dt('Replace the labels for diaries to say "Diary". This applies only to islandora:diaries children with islandora:bookCModel types. You should pass the --user variable into drush with a user that has permission to edit every diary.'),
-      'drupal dependencies' => array('islandora'),
-      'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_LOGIN,
-    ),
   );
 }
 
@@ -55,13 +50,4 @@ function drush_rochdora_prepare_diary() {
 
   $preprocessor = new RochdoraBatchPreprocessor($connection, $parameters);
   islandora_batch_handle_preprocessor($preprocessor);
-}
-
-/**
- * Kicks off a batch for fixing diary labels.
- */
-function drush_rochdora_fix_diary_labels() {
-  module_load_include('inc', 'rochdora', 'includes/batch');
-  batch_set(rochdora_fix_diary_labels_batch());
-  drush_backend_batch_process();
 }

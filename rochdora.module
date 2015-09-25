@@ -106,14 +106,3 @@ function rochdora_islandora_derivative() {
     ),
   );
 }
-
-/**
- * Implements hook_cmodel_pid_islandora_object_ingested().
- */
-function rochdora_islandora_bookCModel_islandora_object_ingested(AbstractObject $object) {
-  module_load_include('inc', 'islandora_basic_collection', 'includes/utilities');
-  // Fix the diary labels if needed.
-  if (in_array('islandora:diaries', islandora_basic_collection_get_parent_pids($object))) {
-    $object->label = str_replace('Diaries', 'Diary', $object->label);
-  }
-}
