@@ -650,3 +650,89 @@ class RochdoraBatchOcclusionImage extends IslandoraScanBatchObject {
     }
   }
 }
+
+/**
+ * Batches through diary objects to fix the labels.
+ *
+ * @return array
+ *   The batch definition array.
+ */
+function rochdora_fix_diary_labels_batch() {
+  return array(
+    'title' => t('Rochdora Fix Diary Labels'),
+    'init_message' => t('Preparing to fix diary labels ...'),
+    'progress_message' => t('Time elapsed: @elapsed <br/>Estimated time remaining: @estimate.'),
+    'error_message' => t('An error has occured'),
+    'file' => drupal_get_path('module', 'rochdora') . '/includes/batch.inc',
+    'operations' => array(
+      array('rochdora_fix_diary_labels_batch_operation', array()),
+    ),
+  );
+}
+
+/**
+ * Batch operation for fixing diary labels.
+ *
+ * @param array $context
+ *   The batch context.
+ */
+function rochdora_fix_diary_labels_batch_operation(&$context) {
+  $sandbox = &$context['sandbox'];
+  if (empty($sandbox)) {
+    $context['finished'] = 0;
+    $sandbox['total'] = rochdora_get_diary_objects(0, TRUE);
+    $sandbox['completed'] = 0;
+  }
+
+  $pids = rochdora_get_diary_objects($sandbox['completed']);
+  foreach ($pids as $pid) {
+    $object = islandora_object_load($pid);
+    $object->label = str_replace('Diaries', 'Diary', $object->label);
+    $sandbox['completed']++;
+  }
+
+  $context['message'] = "{$sandbox['completed']}/{$sandbox['total']}: Replaced 'Diaries' labels with 'Diary'.";
+  if ($sandbox['total'] !== 0) {
+    $context['finished'] = $sandbox['completed'] / $sandbox['total'];
+      if ($context['finished'] === 1) {
+      $context['message'] = "Repaired labels for {$sandbox['total']} objects.";
+    }
+  }
+  else {
+    $context['finished'] = 1;
+  }
+}
+
+/**
+ * Queries for diary objects from the RI.
+ *
+ * @param int $offset
+ *   The offset to pass into the query.
+ * @param bool $count
+ *   Whether or not this is a countQuery.
+ * 
+ * @return array|int
+ *   A list of PIDs if this was a regular query, or the number of objects if it
+ *   was a countQuery.
+ */
+function rochdora_get_diary_objects($offset, $count = FALSE) {
+  $query = <<<EOQ
+SELECT ?pid
+FROM <#ri>
+WHERE {
+  ?pid <fedora-model:hasModel> <info:fedora/islandora:bookCModel> .
+  ?pid <fedora-rels-ext:isMemberOfCollection> <info:fedora/islandora:diaries>
+}
+OFFSET $offset
+EOQ;
+  $connection = islandora_get_tuque_connection();
+  if ($count) {
+    return $connection->repository->ri->countQuery($query, 'sparql');
+  }
+  $query_response = $connection->repository->ri->sparqlQuery($query, 20);
+  $pids = array();
+  foreach ($query_response as $response) {
+    $pids[] = $response['pid']['value'];
+  }
+  return $pids;
+}
