@@ -107,6 +107,16 @@ class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
   }
 
   /**
+   * Gets the title for this object.
+   */
+  protected function getTitle() {
+    parent::getTitle();
+    if (in_array('islandora:bookCModel', $this->models) && in_array('islandora:diaries', $this->relationships->get(FEDORA_RELS_EXT_URI, 'isMemberOfCollection'))) {
+      $this->label = str_replace('Diaries', 'Diary', $this->label);
+    }
+  }
+
+  /**
    * Function to get the mods.
    */
   protected function getMods() {
