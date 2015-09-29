@@ -67,7 +67,7 @@ class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
   public function getChildren(IslandoraTuque $connection) {
     module_load_include('inc', 'rochdora', 'includes/utilities');
     $children = array();
-    $mask = "/Phase3\/{$this->baseName}\/(.*)_p3\.tif/";
+    $mask = "/Phase3\/TIFFs\/{$this->baseName}\/(.*)_p3\.tif/";
     $pages = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $mask);
     $sequence_number = 1;
     foreach ($pages as $page) {
@@ -100,7 +100,7 @@ class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
    * Function batch_process.
    */
   public function batchProcess() {
-    $this->label = $this->getTitle();
+    $this->getTitle();
     $this->getMods();
     $this->getDc();
     return ISLANDORA_BATCH_STATE__DONE;
@@ -111,7 +111,7 @@ class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
    */
   protected function getTitle() {
     parent::getTitle();
-    if (in_array('islandora:bookCModel', $this->models) && in_array('islandora:diaries', $this->relationships->get(FEDORA_RELS_EXT_URI, 'isMemberOfCollection'))) {
+    if (in_array('islandora:bookCModel', $this->models) && $this->preprocessorParameters['parent'] == 'islandora:diaries') {
       $this->label = str_replace('Diaries', 'Diary', $this->label);
     }
   }
@@ -127,7 +127,7 @@ class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
       $mods_datastream->label = 'MODS Record';
 
       // Go and attempt to retrieve the MODS for the volume.
-      $mask = "/Phase5\/metadata\/{$this->baseName}\/(.*)\.mods/";
+      $mask = "/Phase5\/metadata\/mods_{$this->baseName}.mods/";
       $mods_files = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $mask);
       if (!empty($mods_files)) {
         $mods_file = reset($mods_files);
@@ -184,6 +184,8 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
     $this->label = "$parent_id-$sequence";
     // Munge out what page is for matching underneath.
     $this->pageBase = str_replace('_p3', '', $object_info->name);
+    $this->volumeBaseLower = strtolower($this->volumeBase);
+    $this->pageBaseLower = strtolower($this->pageBase);
   }
 
   /**
@@ -193,7 +195,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
     // Go and get occlusions.
     $children = array();
 
-    $mask = "/Phase3\/{$this->volumeBase}\/($this->pageBase)(.*)_p3z\.tif/";
+    $mask = "/Phase3\/TIFFs\/{$this->volumeBase}\/($this->pageBase)(.*)_p3z\.tif/";
     $all_occlusions = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $mask);
 
     // Filter out the single occlusion objects.
@@ -211,7 +213,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
       // and thus would match the file naming scheme with a 'v' on the end. Ex:
       // prefix_095_p3z.tif and prefix_095v_p3z.tif.
       if (!empty($match)) {
-        $potential_key = "Phase3/{$volume_base}/{$page_base}_p3z.tif";
+        $potential_key = "Phase3/TIFFs/{$volume_base}/{$page_base}_p3z.tif";
         return !isset($single_occlusions[$potential_key]);
       }
       return FALSE;
@@ -278,7 +280,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
       $mods_datastream->label = 'MODS Record';
 
       // Go and attempt to retrieve the MODS for the page.
-      $target_mods = "Phase5/metadata/{$this->volumeBase}/{$this->pageBase}_p3.mods";
+      $target_mods = "Phase5/metadata/mods_{$this->volumeBaseLower}/{$this->pageBaseLower}_p3.mods";
       if (isset($this->preprocessorParameters['file_listing'][$target_mods])) {
         $mods_datastream->setContentFromFile($this->preprocessorParameters['file_listing'][$target_mods]->uri, FALSE);
       }
@@ -325,7 +327,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
       $tei_datastream->label = 'TEI Record';
 
       // Go and attempt to retrieve the TEI for the page.
-      $target_tei = "Phase5/final/{$this->volumeBase}/{$this->pageBase}_p3.tei";
+      $target_tei = "Phase5/tei/{$this->volumeBaseLower}/{$this->pageBaseLower}_p3.tei";
       if (isset($this->preprocessorParameters['file_listing'][$target_tei])) {
         $tei_datastream->setContentFromFile($this->preprocessorParameters['file_listing'][$target_tei]->uri, FALSE);
       }
@@ -364,6 +366,8 @@ class RochdoraBatchOccludedImage extends IslandoraScanBatchObject {
     $this->parentId = $parent_id;
     $this->volumeBase = $volume_base;
     $this->pageBase = $page_base;
+    $this->volumeBaseLower = strtolower($this->volumeBase);
+    $this->pageBaseLower = strtolower($this->pageBase);
   }
 
   /**
@@ -423,7 +427,7 @@ class RochdoraBatchOccludedImage extends IslandoraScanBatchObject {
   protected function getMods() {
     // Since the parent object isn't going to be ingested we need to do a bit of
     // shenanigans to get its label.
-    $target_mods = "Phase5/metadata/{$this->volumeBase}/{$this->pageBase}_p3.mods";
+    $target_mods = "Phase5/metadata/mods_{$this->volumeBaseLower}/{$this->pageBaseLower}_p3.mods";
     if (isset($this->preprocessorParameters['file_listing'][$target_mods])) {
       return file_get_contents($this->preprocessorParameters['file_listing'][$target_mods]->uri);
     }
@@ -450,6 +454,8 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
     $this->occlusionBase = $occlusion_base;
     $this->pageBase = $page_base;
     $this->sequenceNumber = $sequence_number;
+    $this->volumeBaseLower = strtolower($this->volumeBase);
+    $this->pageBaseLower = strtolower($this->pageBase);
   }
 
   /**
@@ -458,7 +464,7 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
   public function getChildren(IslandoraTuque $connection) {
     // Go and get occlusion images (front and back).
     $children = array();
-    $mask = "/Phase3\/{$this->volumeBase}\/{$this->occlusionBase}(v)?_p3z\.tif/";
+    $mask = "/Phase3\/TIFFs\/{$this->volumeBase}\/{$this->occlusionBase}(v)?_p3z\.tif/";
     $occlusion_images = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $mask);
     $sequence_number = 1;
     foreach ($occlusion_images as $image) {
@@ -502,7 +508,7 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
   protected function getMods() {
     // Since the parent object isn't going to be ingested we need to do a bit of
     // shenanigans to get its label.
-    $target_mods = "Phase5/metadata/{$this->volumeBase}/{$this->pageBase}_p3.mods";
+    $target_mods = "Phase5/metadata/mods_inc_{$this->volumeBaseLower}/{$this->pageBaseLower}_p3.mods";
     if (isset($this->preprocessorParameters['file_listing'][$target_mods])) {
       return file_get_contents($this->preprocessorParameters['file_listing'][$target_mods]->uri);
     }
@@ -520,7 +526,7 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
     if (!isset($this->label) || empty($this->label)) {
       // First check and see if we can munge from the TEI, if not attempt to
       // fall back on MODS.
-      $target_tei = "Phase5/final/{$this->volumeBase}/{$this->pageBase}_p3.tei";
+      $target_tei = "Phase5/tei/{$this->volumeBaseLower}/{$this->pageBaseLower}_p3.tei";
       if (isset($this->preprocessorParameters['file_listing'][$target_tei])) {
         // Go sniff out a base label for this image.
         $tei = file_get_contents($this->preprocessorParameters['file_listing'][$target_tei]->uri);
@@ -571,7 +577,7 @@ class RochdoraBatchOcclusionImage extends IslandoraScanBatchObject {
    */
   public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $page_base, $occlusion_base) {
     // Sniff out from the file name if this a front or back and name as such.
-    $target_tei = "Phase5/final/{$volume_base}/{$page_base}_p3.tei";
+    $target_tei = 'Phase5/tei/' . strtolower($volume_base) . '/' . strtolower($page_base) . '_p3.tei';
     if (isset($pp['file_listing'][$target_tei])) {
       // Go sniff out a base label for this image.
       $tei = file_get_contents($pp['file_listing'][$target_tei]->uri);
