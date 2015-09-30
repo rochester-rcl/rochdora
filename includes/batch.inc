@@ -577,7 +577,7 @@ class RochdoraBatchOcclusionImage extends IslandoraScanBatchObject {
    */
   public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $page_base, $occlusion_base) {
     // Sniff out from the file name if this a front or back and name as such.
-    $target_tei = 'Phase5/tei/' . strtolower($volume_base) . '/' . strtolower($page_base) . '_p3.tei';
+    $target_tei = 'Phase5/tei/' . strtolower($volume_base) . '/' . strtolower($occlusion_base) . '_p3.tei';
     if (isset($pp['file_listing'][$target_tei])) {
       // Go sniff out a base label for this image.
       $tei = file_get_contents($pp['file_listing'][$target_tei]->uri);
