@@ -10,6 +10,8 @@ This module requires the following modules/libraries:
 
 * [Islandora](https://github.com/islandora/islandora)
 * [Tuque](https://github.com/islandora/tuque)
+* [Islandora Paged TEI Seadragon Viewer](https://github.com/discoverygarden/islandora_paged_tei_seadragon)
+* [DiscoveryGarden's TEI Viewer](https://github.com/discoverygarden/tei_viewer)
 
 ## Installation
 
