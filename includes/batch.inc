@@ -67,11 +67,53 @@ class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
   public function getChildren(IslandoraTuque $connection) {
     module_load_include('inc', 'rochdora', 'includes/utilities');
     $children = array();
-    $mask = "/Phase3\/TIFFs\/{$this->baseName}\/(.*)_p3\.tif/";
-    $pages = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $mask);
+    // There is a disconnect in quality of the scans done in Phase1 versus those
+    // done in Phase3. When an image has no inclusions we want to use the Phase1
+    // image as the page as it is a higher quality scan. Grab both sets of
+    // images here now. Operating under the assumption that if a MODS file is
+    // present for an object that there is an occluded image (an image with the
+    // source page and all clippings present) and an unoccluded image.
+    $phase3_mask = "/Phase3\/TIFFs\/{$this->baseName}\/(.*)_p3\.tif/";
+    $phase3_images = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $phase3_mask);
+    $phase1_mask = "/Phase1\/{$this->baseName}\/TIFFs\/(.*)\.tif/";
+    $phase1_images = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $phase1_mask);
+    // Grab the MODS inclusion for reference down the chain.
+    $mods_mask = "/Phase5\/metadata\/mods_inc_{$this->baseName}\/(.*)\.mods/";
+    $mods_inc = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $mods_mask);
+    $pages = array();
+    $occluded_images = array();
+    foreach ($phase3_images as $key => $values) {
+      // Let's see if we have a matching inclusion.
+      $inclusion_mods = "{$values->name}.mods";
+      $potential_mods_key = "Phase5/metadata/mods_inc_{$this->baseName}/{$inclusion_mods}";
+      // Occluded images have a bit different file naming, so let's munge it
+      // now.
+      $occluded_key = str_replace('_p3', '', $values->name);
+      $potential_occluded_key = "Phase1/{$this->baseName}/TIFFs/{$occluded_key}.tif";
+      // There's an inclusion MODS record present, need to use the Phase3 image,
+      // similary need to construct an occluded image!
+      if (isset($mods_inc[$potential_mods_key])) {
+        $pages[$key] = $values;
+        if (isset($phase1_images[$potential_occluded_key])) {
+          // Tie the key to the page image so we can grab it below!
+          $occluded_images[$values->uri] = $phase1_images[$potential_occluded_key];
+        }
+      }
+      else {
+        // Use the Phase1 image if it exists, otherwise default back to Phase3.
+        // Data inconsistencies yay, also don't create an occluded image.
+        if (isset($phase1_images[$potential_occluded_key])) {
+          $pages[$potential_occluded_key] = $phase1_images[$potential_occluded_key];
+        }
+        else {
+          $pages[$key] = $values;
+        }
+      }
+    }
     $sequence_number = 1;
     foreach ($pages as $page) {
-      $children[] = new RochdoraBatchPageObject($connection, $this->id, $sequence_number, $page, $this->preprocessorParameters, $this->baseName);
+      $occluded_image = isset($occluded_images[$page->uri]) ? $occluded_images[$page->uri] : FALSE;
+      $children[] = new RochdoraBatchPageObject($connection, $this->id, $sequence_number, $page, $this->preprocessorParameters, $this->baseName, $occluded_image);
       $sequence_number = $sequence_number + 1;
     }
     return $children;
@@ -111,9 +153,7 @@ class RochdoraBatchVolumeObject extends IslandoraScanBatchObject {
    */
   protected function getTitle() {
     parent::getTitle();
-    if (in_array('islandora:bookCModel', $this->models) && $this->preprocessorParameters['parent'] == 'islandora:diaries') {
-      $this->label = str_replace('Diaries', 'Diary', $this->label);
-    }
+    $this->label = str_replace('Diaries', 'Diary', $this->label);
   }
 
   /**
@@ -176,7 +216,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
   /**
    * Constructor.
    */
-  public function __construct(IslandoraTuque $connection, $parent_id, $sequence, $object_info, $pp, $volume_base) {
+  public function __construct(IslandoraTuque $connection, $parent_id, $sequence, $object_info, $pp, $volume_base, $occluded_image) {
     parent::__construct($connection, $parent_id, $object_info, $pp);
     $this->parentId = $parent_id;
     $this->sequenceNumber = $sequence;
@@ -186,6 +226,7 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
     $this->pageBase = str_replace('_p3', '', $object_info->name);
     $this->volumeBaseLower = strtolower($this->volumeBase);
     $this->pageBaseLower = strtolower($this->pageBase);
+    $this->occludedImage = $occluded_image;
   }
 
   /**
@@ -228,14 +269,9 @@ class RochdoraBatchPageObject extends IslandoraScanBatchObject {
       $sequence_number = $sequence_number + 1;
     }
 
-    // Go find all the occluded images to create as well.
-    $target_tiff = "Phase1/{$this->volumeBase}/TIFFs/{$this->pageBase}.tif";
-    if (isset($this->preprocessorParameters['file_listing'][$target_tiff])) {
-      $file = new stdClass();
-      $file->uri = $this->preprocessorParameters['file_listing'][$target_tiff]->uri;
-      $file->filename = "{$this->pageBase}.tif";
-      $file->name = pathinfo("{$this->pageBase}.tif", PATHINFO_FILENAME);
-      $children[] = new RochdoraBatchOccludedImage($connection, $this->id, $file, $this->preprocessorParameters, $this->volumeBase, $this->pageBase);
+    // If there's an occluded image for this page add it too.
+    if ($this->occludedImage) {
+      $children[] = new RochdoraBatchOccludedImage($connection, $this->id, $this->occludedImage, $this->preprocessorParameters, $this->volumeBase, $this->pageBase);
     }
     return $children;
   }
@@ -468,7 +504,7 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
     $occlusion_images = rochdora_retrieve_files_for_object($this->preprocessorParameters['file_listing'], $mask);
     $sequence_number = 1;
     foreach ($occlusion_images as $image) {
-      $children[] = new RochdoraBatchOcclusionImage($connection, $this->id, $image, $sequence_number, $this->preprocessorParameters, $this->volumeBase, $this->pageBase, $this->occlusionBase);
+      $children[] = new RochdoraBatchOcclusionImage($connection, $this->id, $image, $sequence_number, $this->preprocessorParameters, $this->volumeBase, $this->pageBase, $this->occlusionBase, $this->objectInfo->name);
       $sequence_number = $sequence_number + 1;
     }
     return $children;
@@ -503,14 +539,39 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
   }
 
   /**
-   * Spoof function to get the MODS to set a title.
+   * Function to get the MODS.
    */
   protected function getMods() {
-    // Since the parent object isn't going to be ingested we need to do a bit of
-    // shenanigans to get its label.
     $target_mods = "Phase5/metadata/mods_inc_{$this->volumeBaseLower}/{$this->pageBaseLower}_p3.mods";
     if (isset($this->preprocessorParameters['file_listing'][$target_mods])) {
-      return file_get_contents($this->preprocessorParameters['file_listing'][$target_mods]->uri);
+      if (!isset($this['MODS'])) {
+        module_load_include('inc', 'rochdora', 'includes/utilities');
+        $dom = new DOMDocument('1.0', 'UTF-8');
+        $dom->load($this->preprocessorParameters['file_listing'][$target_mods]->uri);
+        $xpath = new DOMXPath($dom);
+        $xpath->registerNamespace('mods', 'http://loc.gov/v3/mods');
+        // The identifiers in MODS are stored with a .jpg extension as opposed
+        // to tif, weird right?
+        $mods_result = $xpath->evaluate(format_string('/mods:modsCollection/mods:mods[mods:identifier[@type="fileName"] = "!filename"]', array(
+          '!filename' => "{$this->objectInfo->name}.jpg",
+        )));
+        if ($mods_result->length > 0) {
+          $mods_item = $mods_result->item(0);
+          // Need to make a new DOM so we can get the parent namespaces.
+          $new_dom = new DOMDocument('1.0', 'UTF-8');
+          $node = $new_dom->importNode($mods_item, TRUE);
+          $new_dom->appendChild($node);
+          $mods_datastream = $this->constructDatastream('MODS', 'M');
+          $mods_datastream->mimetype = 'application/xml';
+          $mods_datastream->label = 'MODS Record';
+          $mods_datastream->content = $new_dom->saveXML();
+          $this->ingestDatastream($mods_datastream);
+        }
+        else {
+          return FALSE;
+        }
+      }
+      return $this['MODS']->content;
     }
     else {
       return FALSE;
@@ -523,43 +584,9 @@ class RochdoraBatchOcclusionObject extends IslandoraScanBatchObject {
    * Gets the label not empty; otherwise, grabs a title from the MODS.
    */
   protected function getTitle() {
+    parent::getTitle();
     if (!isset($this->label) || empty($this->label)) {
-      // First check and see if we can munge from the TEI, if not attempt to
-      // fall back on MODS.
-      $target_tei = "Phase5/tei/{$this->volumeBaseLower}/{$this->pageBaseLower}_p3.tei";
-      if (isset($this->preprocessorParameters['file_listing'][$target_tei])) {
-        // Go sniff out a base label for this image.
-        $tei = file_get_contents($this->preprocessorParameters['file_listing'][$target_tei]->uri);
-        // Strip off xml-model so libxml doesn't have a fit.
-        $tei = preg_replace('/<\?xml-model .*\?>/', '', $tei);
-        $dom = new DOMDocument();
-        $dom->loadXML($tei);
-        $xpath = new DOMXPath($dom);
-        $xpath->registerNamespace('tei', 'http://www.tei-c.org/ns/1.0');
-        $label_xpath = format_string('normalize-space(/tei:TEI/tei:teiHeader/tei:fileDesc/tei:sourceDesc/tei:msDesc/tei:physDesc/tei:additions/tei:figure[tei:graphic[@url="!front_filename" or @url="!back_filename"]])', array(
-          '!front_filename' => "{$this->occlusionBase}_p3.jpg",
-          '!back_filename' => "{$this->occlusionBase}_p3z.jpg",
-        ));
-        $base_label = $xpath->evaluate($label_xpath);
-        if (!empty($base_label)) {
-          $this->label = $base_label;
-        }
-      }
-      if (empty($base_label)) {
-        $mods = $this->getMods();
-        if ($mods) {
-          $mods_doc = new DOMDocument();
-          $mods_doc->loadXML($mods);
-          $mods_xpath = new DOMXPath($mods_doc);
-          $mods_xpath->registerNamespace('m', 'http://www.loc.gov/mods/v3');
-
-          $this->label = $mods_xpath->evaluate('string(//m:mods/m:titleInfo/m:title/text())');
-        }
-        $this->label = format_string('!parent_label - Occlusion !sequence', array('!parent_label' => isset($this->label) ? $this->label : $this->parentId, '!sequence' => $this->sequenceNumber));
-      }
-      else {
-        $this->label = $base_label;
-      }
+      $this->label = format_string('!parent_label - Occlusion !sequence', array('!parent_label' => isset($this->label) ? $this->label : $this->parentId, '!sequence' => $this->sequenceNumber));
     }
     return $this->label;
   }
@@ -575,23 +602,24 @@ class RochdoraBatchOcclusionImage extends IslandoraScanBatchObject {
   /**
    * Constructor.
    */
-  public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $page_base, $occlusion_base) {
+  public function __construct(IslandoraTuque $connection, $parent_id, $object_info, $sequence_number, $pp, $volume_base, $page_base, $occlusion_base, $parent_filename) {
     // Sniff out from the file name if this a front or back and name as such.
-    $target_tei = 'Phase5/tei/' . strtolower($volume_base) . '/' . strtolower($occlusion_base) . '_p3.tei';
-    if (isset($pp['file_listing'][$target_tei])) {
-      // Go sniff out a base label for this image.
-      $tei = file_get_contents($pp['file_listing'][$target_tei]->uri);
-      // Strip off xml-model so libxml doesn't have a fit.
-      $tei = preg_replace('/<\?xml-model .*\?>/', '', $tei);
-      $dom = new DOMDocument();
-      $dom->loadXML($tei);
+    $target_mods = format_string('Phase5/metadata/mods_inc_!volume_base/!page_base_p3.mods', array(
+      '!volume_base' => strtolower($volume_base),
+      '!page_base' => strtolower($page_base),
+    ));
+    if (isset($pp['file_listing'][$target_mods])) {
+      // Similarly like the parent these are stored within a MODS collection
+      // wrapper. Using the abstract here for the title until told otherwise.
+      $dom = new DOMDocument('1.0', 'UTF-8');
+      $dom->load($pp['file_listing'][$target_mods]->uri);
       $xpath = new DOMXPath($dom);
-      $xpath->registerNamespace('tei', 'http://www.tei-c.org/ns/1.0');
-      $label_xpath = format_string('normalize-space(/tei:TEI/tei:teiHeader/tei:fileDesc/tei:sourceDesc/tei:msDesc/tei:physDesc/tei:additions/tei:figure[tei:graphic[@url="!front_filename" or @url="!back_filename"]])', array(
-        '!front_filename' => "{$occlusion_base}_p3.jpg",
-        '!back_filename' => "{$occlusion_base}_p3z.jpg",
-      ));
-      $base_label = $xpath->evaluate($label_xpath);
+      $xpath->registerNamespace('mods', 'http://loc.gov/v3/mods');
+      // The identifiers in MODS are stored with a .jpg extension as opposed
+      // to tif, weird right?
+      $base_label = $xpath->evaluate(format_string('string(/mods:modsCollectison/mods:mods[mods:identifier[@type="fileName"] = "!filename"]/mods:abstract)', array(
+        '!filename' => "{$parent_filename}.jpg",
+      )));
     }
     if (preg_match("/{$occlusion_base}_p3z/", $object_info->name)) {
       if (!empty($base_label)) {
