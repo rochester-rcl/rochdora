@@ -55,7 +55,7 @@ function rochdora_volume_batch_menu_access($object) {
  */
 function rochdora_block_view_islandora_compound_object_compound_navigation_alter(&$data, $block) {
   $object = menu_get_object('islandora_object', 2);
-  if (!$data['content'] && in_array('islandora:bookCModel', $object->models)) {
+  if ($object && !$data['content'] && in_array('islandora:bookCModel', $object->models)) {
     module_load_include('inc', 'islandora_compound_object', 'includes/blocks');
     module_load_include('inc', 'islandora_paged_content', 'includes/utilities');
     $page = isset($_GET['islandora_paged_content_page']) ? $_GET['islandora_paged_content_page'] : 1;
@@ -77,7 +77,7 @@ function rochdora_block_view_islandora_compound_object_compound_navigation_alter
   }
 }
 
- /**
+/**
  * Implements hook_islandora_CMODEL_derivative().
  */
 function rochdora_islandora_compoundCModel_islandora_derivative() {
