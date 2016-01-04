@@ -31,6 +31,52 @@ function rochdora_menu() {
 }
 
 /**
+ * modify the theme registry to use the rochester template
+ */
+function rochdora_theme_registry_alter(&$theme_registry) {
+  //dpm($theme_registry);
+  //watchdog("rochdora", "theme registry alter");
+  if (isset($theme_registry['islandora_compound_prev_next'])) {
+    $module_path = drupal_get_path('module', 'rochdora');
+    $theme_registry['islandora_compound_prev_next']['theme path'] = $module_path;
+    $theme_registry['islandora_compound_prev_next']['template'] = $module_path . '/theme/rochdora-compound-prev-next';
+  }
+}
+
+/**
+ * Implements hook_CMODEL_PID_islandora_solr_object_result_alter().
+ *
+ * Replaces the url for the search result to be the book's url, not the page.
+ * The page is added as a fragment at the end of the book url.
+ */
+function rochdora_islandora_pageCModel_islandora_solr_object_result_alter(&$search_results, $query_processor) {
+  // Grab the names of the appropriate solr fields from the db.
+  $parent_book_field_name = variable_get('islandora_book_parent_book_solr_field', 'RELS_EXT_isMemberOf_uri_ms');
+  $page_number_field_name = variable_get('islandora_paged_content_page_number_solr_field', 'RELS_EXT_isSequenceNumber_literal_ms');
+  // If:
+  // there's an object url AND
+  // there's a solr doc AND
+  // the solr doc contains the parent book AND
+  // the solr doc contains the page number...
+  if (isset($search_results['object_url']) &&
+      isset($search_results['solr_doc']) &&
+      isset($search_results['solr_doc'][$parent_book_field_name]) &&
+      count($search_results['solr_doc'][$parent_book_field_name]) &&
+      isset($search_results['solr_doc'][$page_number_field_name]) &&
+      count($search_results['solr_doc'][$page_number_field_name])) {
+    // Replace the result url with that of the parent book and add the page
+    // number as a fragment.
+    $book_pid = preg_replace('/info\:fedora\//', '', $search_results['solr_doc'][$parent_book_field_name][0], 1);
+    $page_number = $search_results['solr_doc'][$page_number_field_name][0];
+
+    if (islandora_object_access(ISLANDORA_VIEW_OBJECTS, islandora_object_load($book_pid))) {     
+      $search_results['object_url_params'] = array('islandora_paged_content_page' => $page_number);   
+    }
+  }
+}
+
+
+/**
  * Menu access callback.
  */
 function rochdora_volume_batch_menu_access($object) {
