@@ -740,9 +740,10 @@ EOQ;
     }
   }
 
-  $context['message'] = dt('Processing results @start to @end', array(
+  $context['message'] = dt('Processing results @start-@end out of @total ...', array(
     '@start' => $sandbox['offset'],
     '@end' => min($sandbox['offset'] + 10, $sandbox['total']),
+    '@total' => $sandbox['total'],
   ));
 
   // Add to the query for getting the objects.

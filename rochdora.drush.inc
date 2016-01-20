@@ -67,5 +67,5 @@ function drush_rochdora_clean_thumbnail_versions() {
   drupal_static_reset('islandora_get_tuque_connection');
   $batch = rochdora_get_thumbnail_version_cleaning_batch();
   batch_set($batch);
-  drush_backend_batch_process($batch);
+  drush_backend_batch_process();
 }
