@@ -698,7 +698,7 @@ class RochdoraBatchOcclusionImage extends IslandoraScanBatchObject {
 /**
  * Gets the batch for cleaning thumbnail versions.
  */
-function rochdora_thumbnail_version_cleaning_batch() {
+function rochdora_get_thumbnail_version_cleaning_batch() {
   return array(
     'operations' => array(
       array('rochdora_remove_extra_thumbnail_versions', array()),
@@ -707,7 +707,7 @@ function rochdora_thumbnail_version_cleaning_batch() {
     'init_message' => t('Preparing to clean thumbnail versions.'),
     'progress_message' => t('Time elapsed: @elapsed <br/>Estimated time remaining: @estimate.'),
     'error_message' => t('An error has occurred.'),
-    'file' => drupal_get_path('module', 'rochdora') . '/rochdora.drush.inc',
+    'file' => drupal_get_path('module', 'rochdora') . '/includes/batch.inc',
   );
 }
 

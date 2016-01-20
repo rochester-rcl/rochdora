@@ -32,7 +32,7 @@ function rochdora_drush_command() {
     ),
     'rochdora_clean_thumbnail_versions' => array(
       'description' => dt('Removes thumnail versions where the number of thumbnail versions do not match the number of source versions.'),
-      'drupal dependencies' => array('islandora', 'rochdora'),
+      'drupal dependencies' => array('rochdora'),
       'aliases' => array('rctv'),
       'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_LOGIN,
       'examples' => array('drush -u 1 rctv'),
@@ -65,7 +65,7 @@ function drush_rochdora_prepare_diary() {
 function drush_rochdora_clean_thumbnail_versions() {
   module_load_include('inc', 'rochdora', 'includes/batch');
   drupal_static_reset('islandora_get_tuque_connection');
-  $batch = rochdora_thumbnail_version_cleaning_batch();
+  $batch = rochdora_get_thumbnail_version_cleaning_batch();
   batch_set($batch);
   drush_backend_batch_process($batch);
 }
