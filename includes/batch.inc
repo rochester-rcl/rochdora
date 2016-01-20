@@ -694,3 +694,85 @@ class RochdoraBatchOcclusionImage extends IslandoraScanBatchObject {
     }
   }
 }
+
+/**
+ * Gets the batch for cleaning thumbnail versions.
+ */
+function rochdora_thumbnail_version_cleaning_batch() {
+  return array(
+    'operations' => array(
+      array('rochdora_remove_extra_thumbnail_versions', array()),
+    ),
+    'title' => t('Cleaning thumbnail versions ...'),
+    'init_message' => t('Preparing to clean thumbnail versions.'),
+    'progress_message' => t('Time elapsed: @elapsed <br/>Estimated time remaining: @estimate.'),
+    'error_message' => t('An error has occurred.'),
+    'file' => drupal_get_path('module', 'rochdora') . '/rochdora.drush.inc',
+  );
+}
+
+/**
+ * Operation for cleaning thumbnail versions.
+ *
+ * @param array $context
+ *   The batch context.
+ */
+function rochdora_remove_extra_thumbnail_versions(&$context) {
+  $connection = islandora_get_tuque_connection();
+  $query = <<<EOQ
+SELECT ?pid
+FROM <#ri>
+WHERE {
+  ?pid <fedora-view:disseminates> ?tn .
+  ?tn <fedora-view:disseminationType> <info:fedora/*/TN> .
+  ?pid <fedora-view:disseminates> ?obj .
+  ?obj <fedora-view:disseminationType> <info:fedora/*/OBJ> .
+}
+EOQ;
+
+  // Base info for the first run.
+  $sandbox = &$context['sandbox'];
+  if (!isset($sandbox['offset'])) {
+    $sandbox['offset'] = 0;
+    $sandbox['total'] = $connection->repository->ri->countQuery($query, 'sparql');
+    if ($sandbox['total'] === 0) {
+      return;
+    }
+  }
+
+  $context['message'] = dt('Processing results @start to @end', array(
+    '@start' => $sandbox['offset'],
+    '@end' => min($sandbox['offset'] + 10, $sandbox['total']),
+  ));
+
+  // Add to the query for getting the objects.
+  $query .= <<<EOQ
+LIMIT 10
+OFFSET {$sandbox['offset']}
+EOQ;
+
+  // Fix the actual objects.
+  $results = $connection->repository->ri->sparqlQuery($query);
+  foreach ($results as $result) {
+    $object = islandora_object_load($result['pid']['value']);
+    $tns = count($object['TN']);
+    $objs = count($object['OBJ']);
+    if ($tns > $objs) {
+      for ($i = 0; $i <= ($tns - $objs); $i++) {
+        // Feels weird, but just unsetting from the end; can't array_pop
+        // versions, only iterate or specify an index.
+        $version = $ocrs - ($i - 1);
+        unset($object['TN'][$version]);
+      }
+      $context['message'] = dt('@pid: OBJ/TN = @obj/@tn; removed @i thumbnails.', array(
+        '@pid' => $object->id,
+        '@obj' => $objs,
+        '@tn' => $tns,
+        '@i' => $i,
+      ));
+    }
+  }
+
+  $sandbox['offset'] += 10;
+  $context['finished'] = $sandbox['offset'] / $sandbox['total'];
+}
