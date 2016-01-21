@@ -762,7 +762,7 @@ EOQ;
       for ($i = 0; $i <= ($tns - $objs); $i++) {
         // Feels weird, but just unsetting from the end; can't array_pop
         // versions, only iterate or specify an index.
-        $version = $ocrs - ($i - 1);
+        $version = $tns - ($i - 1);
         unset($object['TN'][$version]);
       }
       $context['message'] = dt('@pid: OBJ/TN = @obj/@tn; removed @i thumbnails.', array(

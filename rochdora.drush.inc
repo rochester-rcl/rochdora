@@ -31,7 +31,7 @@ function rochdora_drush_command() {
       ),
     ),
     'rochdora_clean_thumbnail_versions' => array(
-      'description' => dt('Removes thumnail versions where the number of thumbnail versions do not match the number of source versions.'),
+      'description' => dt('Removes thumbnail versions where the number of thumbnail versions do not match the number of source versions.'),
       'drupal dependencies' => array('rochdora'),
       'aliases' => array('rctv'),
       'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_LOGIN,
