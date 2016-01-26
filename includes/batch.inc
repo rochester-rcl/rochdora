@@ -759,17 +759,18 @@ EOQ;
     $tns = count($object['TN']);
     $objs = count($object['OBJ']);
     if ($tns > $objs) {
-      for ($i = 0; $i <= ($tns - $objs); $i++) {
+      for ($i = 0; $i < ($tns - $objs); $i++) {
         // Feels weird, but just unsetting from the end; can't array_pop
         // versions, only iterate or specify an index.
-        $version = $tns - ($i - 1);
+        $version = $tns - $i;
         unset($object['TN'][$version]);
       }
-      $context['message'] = dt('@pid: OBJ/TN = @obj/@tn; removed @i thumbnails.', array(
+      $removed_text = format_plural($i, '1 thumbnail', '@count thumbnails');
+      $context['message'] = dt('@pid: OBJ/TN = @obj/@tn; removed @thumbnails.', array(
         '@pid' => $object->id,
         '@obj' => $objs,
         '@tn' => $tns,
-        '@i' => $i,
+        '@thumbnails' => $removed_text,
       ));
     }
   }
