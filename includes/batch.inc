@@ -762,11 +762,11 @@ EOQ;
       for ($i = 0; $i < ($tns - $objs); $i++) {
         // Feels weird, but just unsetting from the end; can't array_pop
         // versions, only iterate or specify an index.
-        $version = $tns - $i;
+        $version = $tns - ($i - 1);
         unset($object['TN'][$version]);
       }
       $removed_text = format_plural($i, '1 thumbnail', '@count thumbnails');
-      $context['message'] = dt('@pid: OBJ/TN = @obj/@tn; removed @thumbnails.', array(
+      $context['message'] = dt('@pid - OBJ:TN = @obj:@tn; removed @thumbnails.', array(
         '@pid' => $object->id,
         '@obj' => $objs,
         '@tn' => $tns,
