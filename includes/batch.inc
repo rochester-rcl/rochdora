@@ -760,8 +760,8 @@ EOQ;
     $objs = count($object['OBJ']);
     if ($tns > $objs) {
       $earliest = $object['TN'][0];
+      $earliest_content = $earliest->content;
       $properties = array(
-        'content' => $earliest->content,
         'label' => $earliest->label,
         'state' => $earliest->state,
         'mimetype' => $earliest->mimetype,
@@ -771,7 +771,7 @@ EOQ;
       foreach ($properties as $property => $value) {
         $new_tn->{$property} = $value;
       }
-      $new_tn->setContentFromString($earliest_version);
+      $new_tn->setContentFromString($earliest_content);
       $object->ingestDatastream($new_tn);
       $context['message'] = dt('@pid: reset thumbnail to earliest version.', array(
         '@pid' => $object->id,
