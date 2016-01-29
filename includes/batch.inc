@@ -759,18 +759,22 @@ EOQ;
     $tns = count($object['TN']);
     $objs = count($object['OBJ']);
     if ($tns > $objs) {
-      for ($i = 0; $i < ($tns - $objs); $i++) {
-        // Feels weird, but just unsetting from the end; can't array_pop
-        // versions, only iterate or specify an index.
-        $version = $tns - ($i - 1);
-        unset($object['TN'][$version]);
+      $earliest = $object['TN'][0];
+      $earliest_content = $earliest->content;
+      $properties = array(
+        'label' => $earliest->label,
+        'state' => $earliest->state,
+        'mimetype' => $earliest->mimetype,
+      );
+      $object->purgeDatastream('TN');
+      $new_tn = $object->constructDatastream('TN', 'M');
+      foreach ($properties as $property => $value) {
+        $new_tn->{$property} = $value;
       }
-      $removed_text = format_plural($i, '1 thumbnail', '@count thumbnails');
-      $context['message'] = dt('@pid - OBJ:TN = @obj:@tn; removed @thumbnails.', array(
+      $new_tn->setContentFromString($earliest_content);
+      $object->ingestDatastream($new_tn);
+      $context['message'] = dt('@pid: reset thumbnail to earliest version.', array(
         '@pid' => $object->id,
-        '@obj' => $objs,
-        '@tn' => $tns,
-        '@thumbnails' => $removed_text,
       ));
     }
   }
