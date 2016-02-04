@@ -38,10 +38,12 @@ The structure required is laid out below:
 >
 > Phase3
 >
->> a_volume
+>>TIFFs
 >>
->>> sometiff_p3.tif
->>> sometiff_p3z.tif
+>>> a_volume
+>>>
+>>>> sometiff_p3.tif
+>>>> sometiff_p3z.tif
 >
 > Phase5
 >
