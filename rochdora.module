@@ -30,18 +30,6 @@ function rochdora_menu() {
   return $items;
 }
 
-/**
- * modify the theme registry to use the rochester template
- */
-function rochdora_theme_registry_alter(&$theme_registry) {
-  //dpm($theme_registry);
-  //watchdog("rochdora", "theme registry alter");
-  if (isset($theme_registry['islandora_compound_prev_next'])) {
-    $module_path = drupal_get_path('module', 'rochdora');
-    $theme_registry['islandora_compound_prev_next']['theme path'] = $module_path;
-    $theme_registry['islandora_compound_prev_next']['template'] = $module_path . '/theme/rochdora-compound-prev-next';
-  }
-}
 
 /**
  * Implements hook_CMODEL_PID_islandora_solr_object_result_alter().
@@ -100,7 +88,7 @@ function rochdora_volume_batch_menu_access($object) {
  * Prints a compound block on books.
  */
 function rochdora_block_view_islandora_compound_object_compound_navigation_alter(&$data, $block) {
-  $object = menu_get_object('islandora_object', 2);
+    $object = menu_get_object('islandora_object', 2);
   if ($object && !$data['content'] && in_array('islandora:bookCModel', $object->models)) {
     module_load_include('inc', 'islandora_compound_object', 'includes/blocks');
     module_load_include('inc', 'islandora_paged_content', 'includes/utilities');
