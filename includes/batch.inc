@@ -759,21 +759,21 @@ EOQ;
     $tns = count($object['TN']);
     $objs = count($object['OBJ']);
     if ($tns > $objs) {
-      $earliest = $object['TN'][0];
-      $earliest_content = $earliest->content;
+      $newest = $object['TN'][$objs - 1];
+      $newest_content = $newest->content;
       $properties = array(
-        'label' => $earliest->label,
-        'state' => $earliest->state,
-        'mimetype' => $earliest->mimetype,
+        'label' => $newest->label,
+        'state' => $newest->state,
+        'mimetype' => 'image/jpeg',
       );
       $object->purgeDatastream('TN');
       $new_tn = $object->constructDatastream('TN', 'M');
       foreach ($properties as $property => $value) {
         $new_tn->{$property} = $value;
       }
-      $new_tn->setContentFromString($earliest_content);
+      $new_tn->setContentFromString($newest_content);
       $object->ingestDatastream($new_tn);
-      $context['message'] = dt('@pid: reset thumbnail to earliest version.', array(
+      $context['message'] = dt('@pid: reset thumbnail to newest version.', array(
         '@pid' => $object->id,
       ));
     }
