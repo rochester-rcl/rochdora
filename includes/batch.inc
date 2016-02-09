@@ -702,6 +702,7 @@ function rochdora_get_thumbnail_version_cleaning_batch() {
   return array(
     'operations' => array(
       array('rochdora_remove_extra_thumbnail_versions', array()),
+      array('rochdora_remove_extra_cover_thumbnail_versions', array()),
     ),
     'title' => t('Cleaning thumbnail versions ...'),
     'init_message' => t('Preparing to clean thumbnail versions.'),
@@ -756,23 +757,68 @@ EOQ;
   $results = $connection->repository->ri->sparqlQuery($query);
   foreach ($results as $result) {
     $object = islandora_object_load($result['pid']['value']);
-    $tns = count($object['TN']);
-    $objs = count($object['OBJ']);
-    if ($tns > $objs) {
-      $newest = $object['TN'][$objs - 1];
-      $newest_content = $newest->content;
-      $properties = array(
-        'label' => $newest->label,
-        'state' => $newest->state,
-        'mimetype' => 'image/jpeg',
-      );
-      $object->purgeDatastream('TN');
-      $new_tn = $object->constructDatastream('TN', 'M');
-      foreach ($properties as $property => $value) {
-        $new_tn->{$property} = $value;
+    if ($object) {
+      $tns = count($object['TN']);
+      $objs = count($object['OBJ']);
+      if ($tns > $objs) {
+        rochdora_remove_all_thumbnails_but_latest($object);
+        $context['message'] = dt('@pid: reset thumbnail to newest version.', array(
+          '@pid' => $object->id,
+        ));
       }
-      $new_tn->setContentFromString($newest_content);
-      $object->ingestDatastream($new_tn);
+    }
+  }
+
+  $sandbox['offset'] += 10;
+  $context['finished'] = $sandbox['offset'] / $sandbox['total'];
+}
+
+/**
+ * Removes extra thumbnails from the covers.
+ *
+ * @param array $context
+ *   The batch context array.
+ */
+function rochdora_remove_extra_cover_thumbnail_versions(&$context) {
+  $connection = islandora_get_tuque_connection();
+  $query = <<<EOQ
+SELECT ?pid
+FROM <#ri>
+WHERE {
+  ?pid <fedora-model:hasModel> <info:fedora/islandora:bookCModel> .
+  ?pid <fedora-view:disseminates> ?tn .
+  ?tn <fedora-view:disseminationType> <info:fedora/*/TN> .
+}
+EOQ;
+
+  // Base info for the first run.
+  $sandbox = &$context['sandbox'];
+  if (!isset($sandbox['offset'])) {
+    $sandbox['offset'] = 0;
+    $sandbox['total'] = $connection->repository->ri->countQuery($query, 'sparql');
+    if ($sandbox['total'] === 0) {
+      return;
+    }
+  }
+
+  $context['message'] = dt('Processing results @start-@end out of @total ...', array(
+    '@start' => $sandbox['offset'],
+    '@end' => min($sandbox['offset'] + 10, $sandbox['total']),
+    '@total' => $sandbox['total'],
+  ));
+
+  // Add to the query for getting the objects.
+  $query .= <<<EOQ
+LIMIT 10
+OFFSET {$sandbox['offset']}
+EOQ;
+
+  // Fix the actual objects.
+  $results = $connection->repository->ri->sparqlQuery($query);
+  foreach ($results as $result) {
+    $object = islandora_object_load($result['pid']['value']);
+    if ($object) {
+      rochdora_remove_all_thumbnails_but_latest($object);
       $context['message'] = dt('@pid: reset thumbnail to newest version.', array(
         '@pid' => $object->id,
       ));
@@ -781,4 +827,31 @@ EOQ;
 
   $sandbox['offset'] += 10;
   $context['finished'] = $sandbox['offset'] / $sandbox['total'];
+
+}
+
+/**
+ * Sets the thumbnail to the latest.
+ *
+ * @param AbstractObject $object
+ *   The object in question.
+ */
+function rochdora_remove_all_thumbnails_but_latest(AbstractObject $object) {
+  if (isset($object['TN'])) {
+    $last_tn = count($object['TN']) - 1;
+    $newest = $object['TN'][$last_tn];
+    $newest_content = $newest->content;
+    $properties = array(
+      'label' => $newest->label,
+      'state' => $newest->state,
+      'mimetype' => 'image/jpeg',
+    );
+    $object->purgeDatastream('TN');
+    $new_tn = $object->constructDatastream('TN', 'M');
+    foreach ($properties as $property => $value) {
+      $new_tn->{$property} = $value;
+    }
+    $new_tn->setContentFromString($newest_content);
+    $object->ingestDatastream($new_tn);
+  }
 }
