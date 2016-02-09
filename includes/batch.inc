@@ -741,7 +741,7 @@ EOQ;
     }
   }
 
-  $context['message'] = dt('Processing results @start-@end out of @total ...', array(
+  $context['message'] = dt('Processing items with OBJ and TN datastreams @start-@end out of @total ...', array(
     '@start' => $sandbox['offset'],
     '@end' => min($sandbox['offset'] + 10, $sandbox['total']),
     '@total' => $sandbox['total'],
@@ -801,7 +801,7 @@ EOQ;
     }
   }
 
-  $context['message'] = dt('Processing results @start-@end out of @total ...', array(
+  $context['message'] = dt('Processing book items @start-@end out of @total ...', array(
     '@start' => $sandbox['offset'],
     '@end' => min($sandbox['offset'] + 10, $sandbox['total']),
     '@total' => $sandbox['total'],
@@ -817,7 +817,7 @@ EOQ;
   $results = $connection->repository->ri->sparqlQuery($query);
   foreach ($results as $result) {
     $object = islandora_object_load($result['pid']['value']);
-    if ($object) {
+    if ($object && count($object['TN']) > 1) {
       rochdora_remove_all_thumbnails_but_latest($object);
       $context['message'] = dt('@pid: reset thumbnail to newest version.', array(
         '@pid' => $object->id,
