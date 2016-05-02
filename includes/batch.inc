@@ -873,6 +873,98 @@ function rochdora_get_mods_fix_batch($connection, $parameters) {
     );
 }
 
+// ----------------------------- TEI FIX -----------------------------
+/**
+ * Gets the batch for fixing mods
+ */
+function rochdora_get_tei_replace_batch($connection, $parameters) {
+    return array(
+        'operations' => array(
+            array('rochdora_replace_tei_data', array($connection, $parameters)),
+        ),
+        'title' => t('Adding new tei version ...'),
+        'init_message' => t('Preparing to fix tei content.'),
+        'progress_message' => t('Time elapsed: @elapsed <br/>Estimated time remaining: @estimate.'),
+        'error_message' => t('An error has occurred.'),
+        'file' => drupal_get_path('module', 'rochdora') . '/includes/batch.inc',
+    );
+}
+
+function rochdora_replace_tei_data($connection, $parameters, &$context){
+    
+    module_load_include('inc', 'islandora_paged_content', 'includes/utilities');
+    module_load_include('inc', 'islandora', 'includes/solution_packs');
+    module_load_include('inc', 'islandora', 'includes/metadata');
+    
+    echo("\nrochdora_replace_tei_data\n");
+    var_dump($parameters);
+    $object = islandora_object_load($parameters["parent"]);
+    if ($object) {
+        
+        $diary_pages = rochdora_get_diary_pages($object);
+        
+        foreach($diary_pages as $key => $value){ 
+            print_r("\nfound page - " . $key . " => " . $value . "\n");
+        }
+        $tei_files = rochdora_process_tei_files_for_diary($parameters);
+        foreach($tei_files as $key => $value){ 
+            print_r("\nfound tei - " . $key . " => " . $value . "\n");
+        }
+        rochdora_fix_tei_files($diary_pages, $tei_files);
+    }
+}
+
+
+function rochdora_process_tei_files_for_diary($parameters) {
+
+    $fileProcessor = new RochdoraScanBatch($parameters);
+    $files = $fileProcessor->getFiles();
+
+    $tei_files = array();
+    foreach ($files as $file) {
+        print_r("\nprocessing tei file " . $file->uri . "\n");
+        module_load_include('inc', 'rochdora', 'includes/utilities');
+        $dom = new DOMDocument('1.0', 'UTF-8');
+        $dom->load($file->uri);
+
+        $tei_tag = $dom->getElementsByTagName("TEI");
+        if ($tei_tag->length > 0) {
+            $xmlId = $tei_tag->item(0)->getAttribute("xml:id");
+            if (!empty($xmlId)) {
+                $tei_files[$xmlId] = $file->uri;
+            }
+        } else {
+            print_r("\npage identifier could not be found in file " . $file->uri . " \n");
+        }
+    }
+    return $tei_files;
+}
+
+function rochdora_fix_tei_files($diary_pages, $tei_files) {
+    
+    foreach ($tei_files as $key => $value) {
+
+        $page_object = $diary_pages[$key];
+
+        if (!empty($page_object)) {
+            print_r("\n updating tei for page " . $page_object->id . " with tei file - " . $key . " => " . $value . "\n");
+            $file = file_load($value);
+            try {
+                $ds = $page_object['TEI'];
+                $ds->setContentFromFile($value);
+            } catch (exception $e) {
+                print_r("\n An error occurred during datastream updates for pid: " . $page_object->id . "\n");
+                print_r("code => " . $e->getCode());
+                print_r("message => " . $e->getMessage());
+            }
+        } else {
+            print_r("\n could not find page object for key " . $key . " file = " . $value);
+        }
+    }
+}
+
+// ----------------------------- END TEI FIX -----------------------------
+
 /**
  * Operation for getting mods data
  *
@@ -895,7 +987,7 @@ function rochdora_fix_mods_data($connection, $parameters, &$context) {
             
             print_r("\n" . $key . " => " . $value . "\n");
         }
-        $inclusion_files = rochdora_process_files_for_diary($object, $parameters, $diary_pages);
+        $inclusion_files = rochdora_process_files_for_diary($parameters);
         foreach($inclusion_files as $key => $value){
             print_r("\n" . $key . " => " . $value . "\n");
         }
@@ -1023,10 +1115,10 @@ function rochdora_cmp($a, $b){
 }
 
 /**
- * Get a map of all the pages with the diary page ids
+ * Get a map of all the pages with the diary page xml ids
  * 
  * @param type $object
- * @return type
+ * @return array xmlId -> islandora object
  */
 function rochdora_get_diary_pages($object) {
     $pages = islandora_paged_content_get_pages($object);
@@ -1054,7 +1146,7 @@ function rochdora_get_diary_pages($object) {
     return $diary_pid_page_keys;
 }
 
-function rochdora_process_files_for_diary($object, $parameters, $diary_page_keys) {
+function rochdora_process_files_for_diary($parameters) {
 
     $fileProcessor = new RochdoraScanBatch($parameters);
     $files = $fileProcessor->getFiles();
