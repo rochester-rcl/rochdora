@@ -57,6 +57,7 @@ function rochdora_drush_command() {
                 ),
                 'parent' => array(
                     'description' => dt('The collection to which mods should be added'),
+                    'required' => TRUE,
                 ),
             )
         ),
@@ -75,6 +76,26 @@ function rochdora_drush_command() {
                 ),
                 'parent' => array(
                     'description' => dt('The collection to which tei should be fixed'),
+                    'required' => TRUE,
+                ),
+            )
+        ),
+        'rochdora_mods_page_replacer' => array(
+            'description' => dt('Replace the mods for the given parent'),
+            'aliases' => array('rochmr'),
+            'drupal dependencies' => array('rochdora'),
+            'options' => array(
+                'type' => array(
+                    'description' => dt('Either "directory" or "zip".'),
+                    'required' => TRUE,
+                ),
+                'target' => array(
+                    'description' => dt('The target to directory or zip file to scan.'),
+                    'required' => TRUE,
+                ),
+                'parent' => array(
+                    'description' => dt('The collection to which tei should be fixed'),
+                    'required' => TRUE,
                 ),
             )
         ),
@@ -150,6 +171,27 @@ function drush_rochdora_tei_replacer() {
     );
     
     $batch = rochdora_get_tei_replace_batch($connection, $parameters);
+    batch_set($batch);
+    drush_backend_batch_process();
+}
+
+/**
+ * Sets a batch to remove extra thumbnail versions.
+ */
+function drush_rochdora_mods_page_replacer() {
+    module_load_include('inc', 'rochdora', 'includes/batch');
+    drupal_static_reset('islandora_get_tuque_connection');
+    
+    $connection = islandora_get_tuque_connection();
+    $parameters = array(
+        'type' => drush_get_option('type'),
+        'target' => drush_get_option('target'),
+        'parent' => drush_get_option('parent', 'islandora:bookCollection'),
+        'parent_relationship_uri' => FEDORA_RELS_EXT_URI,
+        'parent_relationship_pred' => 'isMemberOfCollection',
+    );
+    
+    $batch = rochdora_get_mods_page_replace_batch($connection, $parameters);
     batch_set($batch);
     drush_backend_batch_process();
 }

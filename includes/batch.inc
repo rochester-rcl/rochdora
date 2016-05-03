@@ -882,7 +882,7 @@ function rochdora_get_tei_replace_batch($connection, $parameters) {
         'operations' => array(
             array('rochdora_replace_tei_data', array($connection, $parameters)),
         ),
-        'title' => t('Adding new tei version ...'),
+        'title' => t('Adding new tei versions ...'),
         'init_message' => t('Preparing to fix tei content.'),
         'progress_message' => t('Time elapsed: @elapsed <br/>Estimated time remaining: @estimate.'),
         'error_message' => t('An error has occurred.'),
@@ -965,6 +965,96 @@ function rochdora_fix_tei_files($diary_pages, $tei_files) {
 
 // ----------------------------- END TEI FIX -----------------------------
 
+
+// ----------------------------- MODS FIX -----------------------------
+function rochdora_get_mods_page_replace_batch($connection, $parameters) {
+    return array(
+        'operations' => array(
+            array('rochdora_replace_mods_page_data', array($connection, $parameters)),
+        ),
+        'title' => t('Adding new mods versions ...'),
+        'init_message' => t('Preparing to fix mods content.'),
+        'progress_message' => t('Time elapsed: @elapsed <br/>Estimated time remaining: @estimate.'),
+        'error_message' => t('An error has occurred.'),
+        'file' => drupal_get_path('module', 'rochdora') . '/includes/batch.inc',
+    );
+} 
+
+function rochdora_replace_mods_page_data($connection, $parameters, &$context){
+    
+    module_load_include('inc', 'islandora_paged_content', 'includes/utilities');
+    module_load_include('inc', 'islandora', 'includes/solution_packs');
+    module_load_include('inc', 'islandora', 'includes/metadata');
+    
+    echo("\nrochdora_replace_mods_data\n");
+    var_dump($parameters);
+    $object = islandora_object_load($parameters["parent"]);
+    if ($object) {
+        
+        $diary_pages = rochdora_get_diary_pages($object);
+        
+        foreach($diary_pages as $key => $value){ 
+            print_r("\nfound page - " . $key . " => " . $value . "\n");
+        }
+        $mods_files = rochdora_process_mods_page_files_for_diary($parameters);
+        foreach($mods_files as $key => $value){ 
+            print_r("\nfound mods - " . $key . " => " . $value . "\n");
+        }
+        rochdora_replace_mods_page_files($diary_pages, $mods_files);
+    }
+}
+
+function rochdora_process_mods_page_files_for_diary($parameters) {
+    $fileProcessor = new RochdoraScanBatch($parameters);
+    $files = $fileProcessor->getFiles();
+
+    $inclusions = array();
+    foreach ($files as $file) {
+        print_r("\nprocessing file " . $file->uri . "\n");
+        module_load_include('inc', 'rochdora', 'includes/utilities');
+        $dom = new DOMDocument('1.0', 'UTF-8');
+        $dom->load($file->uri);
+        $xpath = new DOMXPath($dom);
+        $xpath->registerNamespace('mods', 'http://loc.gov/v3/mods');
+
+        // get the page identifer
+        $page_identifiers = $xpath->evaluate('(/mods:mods/mods:relatedItem[@displayLabel="Volume" and @type="host"]/mods:identifier[@type="tei_id"])');
+
+        if ($page_identifiers->length > 0) {
+            $page_identifier = $page_identifiers->item(0)->nodeValue;
+            $inclusions[$page_identifier] = $file->uri;
+            
+        } else {
+            print_r("\npage identifier could not be found in file " . $file->uri . " \n");
+        }
+    }
+    return $inclusions;
+}
+
+function rochdora_replace_mods_page_files($diary_pages, $page_mods_files) {
+    
+    foreach ($page_mods_files as $key => $value) {
+
+        $page_object = $diary_pages[$key];
+
+        if (!empty($page_object)) {
+            print_r("\nupdating mods for page " . $page_object->id . " with mods page file - " . $key . " => " . $value . "\n");
+            $file = file_load($value);
+            try {
+                $ds = $page_object['MODS'];
+                $ds->setContentFromFile($value);
+            } catch (exception $e) {
+                print_r("\n An error occurred during MODS datastream updates for pid: " . $page_object->id . "\n");
+                print_r("code => " . $e->getCode());
+                print_r("message => " . $e->getMessage());
+            }
+        } else {
+            print_r("\ncould not find page object for key " . $key . " file = " . $value . " in rplace page mods files");
+        }
+    }
+}
+
+// ----------------------------- END MODS FIX -----------------------------
 /**
  * Operation for getting mods data
  *
