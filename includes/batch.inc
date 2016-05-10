@@ -1109,7 +1109,7 @@ function rochdora_replace_mods_files($diary_pages, $inclusion_files){
         $parent_object = $diary_pages[$inclusion_key];
         print_r("\nLooking at inclusion key " . $inclusion_key . " => " . $parent_object . "\n");
         if(!empty($parent_object)){
-            print_r("\n get children for pid " . $parent_object->id . "\n");
+            print_r("\nget children for pid " . $parent_object->id . "\n");
             $children = rochdora_get_children($parent_object->id);
             if(!empty($children)){
                 $mods_results = rochdora_get_inclusion_mods($inclusion_file);
@@ -1120,11 +1120,20 @@ function rochdora_replace_mods_files($diary_pages, $inclusion_files){
                 
                 foreach($children as $child_index => $child){
                     if( $index < $mods_length){
-                        print_r("\n child index = " . $child_index . " => " . $child . "\n");
+                        print_r("\nchild index = " . $child_index . " => " . $child . "\n");
                         $mods_item = $mods_results->item($index);
+                        
+                        $abstracts = $mods_item->getElementsByTagName("abstract");
+                        if($abstracts->length > 0 ){
+                            foreach($abstracts as $abstract_index => $abstract){
+                                print_r("new title: " . $abstract->nodeValue . "\n");
+                            }
+                        } else {
+                            print_r("title missing\n");
+                        }
+                        
                         rochdora_replace_mods_inc_file($mods_item, $child);
-                        //$abstract = 
-                        //var_dump($mods_results->item($index));
+                        
                     } else {
                         print_r("\n no mods found for child pid => " + $child_pid);
                     }
@@ -1145,10 +1154,9 @@ function rochdora_replace_mods_files($diary_pages, $inclusion_files){
  * @param type $object
  */
 function rochdora_replace_mods_inc_file($mods_item, $object) {
-    print_r("\n replace mods inc data");
    
     if (!(isset($object['MODS']))) { // add new if one doesn't exist
-        print_r("\n Adding MODS file for object " . $object->id . "\n");
+        print_r("\nAdding NEW MODS file for object " . $object->id . "\n");
         
         // Need to make a new DOM so we can get the parent namespaces.
         $new_dom = new DOMDocument('1.0', 'UTF-8');
@@ -1160,13 +1168,22 @@ function rochdora_replace_mods_inc_file($mods_item, $object) {
         $mods_datastream->content = $new_dom->saveXML();
         $object->ingestDatastream($mods_datastream);
     } else {
-        print_r("\n Replace mods inclusion for pid: " . $object->id . "\n");
+        $input = new DOMDocument();
+        $input->loadXML($object['MODS']->content);
+        $abstract_tag = $input->getElementsByTagName("abstract");
+        if ($abstract_tag->length > 0) {
+            foreach($abstract_tag as $abstract_index => $abstract){
+                print_r("old title: " . $abstract->nodeValue . "\n");
+            } 
+        }
+        
         $new_dom = new DOMDocument('1.0', 'UTF-8');
         $new_dom->formatOutput = true;
         $node = $new_dom->importNode($mods_item, TRUE);
         $new_dom->appendChild($node);
         $ds = $object['MODS'];
         $ds->setContentFromString($new_dom->saveXML());
+        print_r("\nReplaced mods inclusion for pid: " . $object->id . "\n");
     }
 }
 
@@ -1248,7 +1265,7 @@ function rochdora_fix_mods_files($diary_pages, $inclusion_files){
  */
 function rochdora_add_mods_file($mods_item, $object) {
     if (!(isset($object['MODS']))) {
-        print_r("\n Adding MODS file for object " . $object->id . "\n");
+        print_r("\nAdding MODS file for object " . $object->id . "\n");
         
         // Need to make a new DOM so we can get the parent namespaces.
         $new_dom = new DOMDocument('1.0', 'UTF-8');
@@ -1260,7 +1277,7 @@ function rochdora_add_mods_file($mods_item, $object) {
         $mods_datastream->content = $new_dom->saveXML();
         $object->ingestDatastream($mods_datastream);
     } else {
-        print_r("\n MODS already exists for " . $object->id . "\n");
+        print_r("\nMODS already exists for " . $object->id . "\n");
     }
 }
 
@@ -1370,12 +1387,9 @@ function rochdora_process_files_for_diary($parameters) {
         $xpath = new DOMXPath($dom);
         $xpath->registerNamespace('mods', 'http://loc.gov/v3/mods');
 
-        print_r("i'm here");
         // get the page identifer
         $page_identifiers = $xpath->evaluate('(/mods:modsCollection/mods:mods//mods:relatedItem[@displayLabel="Page" and @type="host"]/mods:identifier)[1]');
 
-        print_r("looking at data");
-        var_dump($page_identifiers);
         if ($page_identifiers->length > 0) {
             $page_identifier = $page_identifiers->item(0)->nodeValue;
             $inclusions[$page_identifier] = $file->uri;
