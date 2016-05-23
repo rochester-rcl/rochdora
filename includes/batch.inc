@@ -1318,28 +1318,9 @@ function rochdora_get_children($parent_pid){
         $sibling_object = islandora_object_load($child_pid);
         $children[$child_pid] = $sibling_object;
     }     
-    usort($children, "rochdora_cmp");
     return $children;
 }
 
-/**
- * Correctly order the pids first to last
- * 
- * @param type $a
- * @param type $b
- * @return int
- */
-function rochdora_cmp($a, $b){
-    
-    $a_id = intval(explode(":", $a->id)[1]);
-    $b_id = intval(explode(":", $b->id)[1]);
-   
-    if($a_id == $b_id){
-        return 0;
-    }
-    return ($a_id < $b_id) ? -1 : 1;
-    
-}
 
 /**
  * Get a map of all the pages with the diary page xml ids
