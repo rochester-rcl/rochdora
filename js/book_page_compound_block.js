@@ -33,10 +33,20 @@
                 })();
                 var myUrl = Drupal.settings.basePath + "rochdora/compound_block/" + pid;
                 
-                if (urlParams && urlParams['occluded'] && urlParams['occluded'] === "true") {
-                    myUrl = Drupal.settings.basePath + "rochdora/compound_block/" + pid + "?occluded=true";;
+                if (urlParams) {
+                    var occluded = "?occluded=false";
+                    if(urlParams['occluded'] && urlParams['occluded'] === "true"){
+                        occluded = "?occluded=true";
+                    }
+                    
+                    var readerView = "&readerView=false";
+                    if(urlParams['readerView'] && urlParams['readerView'] === "true"){
+                       readerView = "&readerView=true";
+                    }
+                    
+                    myUrl = Drupal.settings.basePath + "rochdora/compound_block/" + pid + occluded + readerView;
                 }
-
+                
                 // Update compound block.
                 $.ajax({
                     url:myUrl,
